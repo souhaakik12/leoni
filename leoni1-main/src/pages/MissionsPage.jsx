@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMissions } from "../context/MissionsContext.jsx";
+import "./MissionsPage.css";
 
 const villes = ["Toutes les villes", "Tunis", "Sfax", "Sousse", "Bizerte", "Kairouan", "Gabès", "Gafsa", "Nabeul"];
 const villesForm = ["Tunis", "Sfax", "Sousse", "Bizerte", "Kairouan", "Gabès", "Gafsa", "Nabeul"];
@@ -8,9 +9,9 @@ const transports = ["Bus", "Minibus", "Van", "Voiture de service"];
 const statuts = ["Planifiée", "En cours", "Terminée"];
 
 const statutConfig = {
-  "Terminée":  { bg: "#dcfce7", color: "#16a34a" },
-  "En cours":  { bg: "#dbeafe", color: "#2563eb" },
-  "Planifiée": { bg: "#f3f4f6", color: "#6b7280" },
+  "Terminée":  { bg: "#def4e9", color: "#1f885c" },
+  "En cours":  { bg: "#deedf9", color: "#1d6d9e" },
+  "Planifiée": { bg: "#e8f2fa", color: "#4f6f88" },
 };
 
 // ── Reusable input style ──────────────────────────────────────────────────────
@@ -201,7 +202,7 @@ function ModalFooter({ children }) {
 
 function Field({ label, error, children }) {
   return (
-    <div>
+    <div className="missions-page">
       <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 5 }}>{label}</label>
       {children}
       {error && <p style={{ fontSize: 11, color: "#dc2626", marginTop: 3 }}>{error}</p>}
@@ -280,41 +281,43 @@ export default function MissionsPage() {
       )}
 
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
-        <div>
-          <h2 style={{ fontSize: 22, fontWeight: 800, color: "var(--text-primary)", letterSpacing: "-0.02em" }}>Gestion des Missions</h2>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 3 }}>{missions.length} missions au total</p>
-        </div>
-        <button onClick={() => navigate("/missions/create")} style={{
-          display: "flex", alignItems: "center", gap: 6,
-          background: "#2563eb", color: "#fff", border: "none", borderRadius: 8,
-          padding: "9px 18px", fontSize: 13, fontWeight: 600,
-          boxShadow: "0 2px 8px rgba(37,99,235,0.3)", cursor: "pointer",
-        }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          Nouvelle Mission
-        </button>
-      </div>
-
-      {/* Stats pills */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
-        {[
-          { label: "Total",      val: missions.length,                               color: "#2563eb", bg: "#eff6ff" },
-          { label: "Planifiées", val: missions.filter(m => m.statut==="Planifiée").length, color: "#6b7280", bg: "#f3f4f6" },
-          { label: "En cours",   val: missions.filter(m => m.statut==="En cours").length,  color: "#d97706", bg: "#fffbeb" },
-          { label: "Terminées",  val: missions.filter(m => m.statut==="Terminée").length,  color: "#16a34a", bg: "#dcfce7" },
-        ].map(s => (
-          <div key={s.label} style={{ background: s.bg, borderRadius: 8, padding: "8px 16px", display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.val}</span>
-            <span style={{ fontSize: 12, color: s.color, fontWeight: 600 }}>{s.label}</span>
+      <div className="missions-top-left">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <h2 style={{ fontSize: 22, fontWeight: 800, color: "#133f5e", letterSpacing: "-0.02em" }}>Gestion des Missions</h2>
+              <p style={{ fontSize: 13, color: "#5b788f", marginTop: 3 }}>{missions.length} missions au total</p>
+            </div>
+            <button onClick={() => navigate("/missions/create")} style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: "linear-gradient(120deg, #2c83b8, #216f9f)", color: "#fff", border: "1px solid #206a97", borderRadius: 8,
+              padding: "9px 18px", fontSize: 13, fontWeight: 700,
+              boxShadow: "0 2px 10px rgba(34,111,159,0.25)", cursor: "pointer",
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Nouvelle Mission
+            </button>
           </div>
-        ))}
+
+          {/* Stats pills */}
+          <div style={{ display: "flex", gap: 10, marginBottom: 0, flexWrap: "wrap" }}>
+            {[
+              { label: "Total",      val: missions.length,                               color: "#1d6d9e", bg: "#e8f2fa" },
+              { label: "Planifiées", val: missions.filter(m => m.statut==="Planifiée").length, color: "#4f6f88", bg: "#edf3f8" },
+              { label: "En cours",   val: missions.filter(m => m.statut==="En cours").length,  color: "#2c83b8", bg: "#deedf9" },
+              { label: "Terminées",  val: missions.filter(m => m.statut==="Terminée").length,  color: "#1f885c", bg: "#def4e9" },
+            ].map(s => (
+              <div key={s.label} style={{ background: s.bg, borderRadius: 8, border: "1px solid #d0e2ef", padding: "8px 16px", display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.val}</span>
+                <span style={{ fontSize: 12, color: s.color, fontWeight: 700 }}>{s.label}</span>
+              </div>
+            ))}
+          </div>
       </div>
 
       {/* Filters */}
-      <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 10, padding: "16px 20px", marginBottom: 20 }}>
+      <div className="missions-filters-panel" style={{ background: "#fff", border: "1px solid #d8e6f1", borderRadius: 10, padding: "16px 20px", marginBottom: 20 }}>
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
           {/* Search */}
           <div style={{ flex: 2, minWidth: 200, position: "relative" }}>
@@ -353,7 +356,7 @@ export default function MissionsPage() {
       </div>
 
       {/* Table */}
-      <div style={{ background: "#fff", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
+      <div className="missions-table-panel" style={{ background: "#fff", border: "1px solid #d8e6f1", borderRadius: 10, overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ background: "#f9fafb", borderBottom: "1px solid var(--border)" }}>
@@ -434,3 +437,4 @@ function ActionBtn({ title, color, bg, onClick, children }) {
     </button>
   );
 }
+

@@ -12,10 +12,11 @@ import DormResidentsPage from "./pages/DormResidentsPage.jsx";
 import MissionsPage from "./pages/MissionsPage.jsx";
 import ContractsPage from "./pages/ContractsPage.jsx";
 import RecruteurDashboard from "./pages/RecruteurDashboard.jsx";
-import ContratsDashboard from "./pages/ContratsDashboard.jsx";
+import ContractReceptionPage from "./pages/ContractReceptionPage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
 import CreateMissionPage from "./pages/CreateMissionPage.jsx";
 import CandidatsPage from "./pages/CandidatsPage.jsx";
+import CandidatDossierPage from "./pages/CandidatDossierPage.jsx";
 import "./App.css";
 
 function ProtectedRoute({ children, allowedRoles }) {
@@ -29,7 +30,7 @@ function AppLayout() {
   const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   if (!user) return <Navigate to="/login" replace />;
-  const homeRoute = { admin: "/", recruteur: "/missions", contrats: "/contracts" };
+  const homeRoute = { admin: "/", recruteur: "/missions", contrats: "/contracts/reception" };
 
   return (
     <div className="app-layout">
@@ -56,12 +57,21 @@ function AppLayout() {
               <ProtectedRoute allowedRoles={["admin","recruteur"]}><CreateMissionPage /></ProtectedRoute>
             } />
             <Route path="/candidats" element={
+              <ProtectedRoute allowedRoles={["admin","recruteur"]}><Navigate to="/candidats/candidat" replace /></ProtectedRoute>
+            } />
+            <Route path="/candidats/:typePage" element={
               <ProtectedRoute allowedRoles={["admin","recruteur"]}><CandidatsPage /></ProtectedRoute>
+            } />
+            <Route path="/candidats/:typePage/:candidatId/dossier" element={
+              <ProtectedRoute allowedRoles={["admin","recruteur","contrats"]}><CandidatDossierPage /></ProtectedRoute>
             } />
             <Route path="/contracts" element={
               <ProtectedRoute allowedRoles={["admin","contrats"]}>
-                {user.role === "contrats" ? <ContratsDashboard /> : <ContractsPage />}
+                {user.role === "contrats" ? <Navigate to="/contracts/reception" replace /> : <ContractsPage />}
               </ProtectedRoute>
+            } />
+            <Route path="/contracts/reception" element={
+              <ProtectedRoute allowedRoles={["admin","contrats"]}><ContractReceptionPage /></ProtectedRoute>
             } />
             <Route path="/profile" element={
               <ProtectedRoute allowedRoles={["recruteur","contrats"]}><ProfilePage /></ProtectedRoute>
@@ -77,7 +87,7 @@ function AppLayout() {
 function LoginPageWrapper() {
   const { user } = useAuth();
   if (user) {
-    const routes = { admin: "/", recruteur: "/missions", contrats: "/contracts" };
+    const routes = { admin: "/", recruteur: "/missions", contrats: "/contracts/reception" };
     return <Navigate to={routes[user.role] || "/"} replace />;
   }
   return <LoginPage />;

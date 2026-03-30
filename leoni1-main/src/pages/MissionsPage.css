@@ -1,0 +1,20 @@
+.missions-page {
+  display: flex;
+  flex-direction: column;
+}
+
+.missions-top-left {
+  border: 1px solid #d8e6f1;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #f7fbff, #edf5fc);
+  padding: 14px;
+  margin-bottom: 18px;
+}
+
+.missions-filters-panel {
+  box-shadow: 0 4px 18px rgba(24, 75, 111, 0.06);
+}
+
+.missions-table-panel {
+  box-shadow: 0 4px 18px rgba(24, 75, 111, 0.06);
+}

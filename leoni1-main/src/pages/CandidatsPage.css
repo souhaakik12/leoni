@@ -1,0 +1,709 @@
+.cand-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cand-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.cand-header h2 {
+  font-size: 23px;
+  font-weight: 800;
+  color: #0e3654;
+  letter-spacing: -0.02em;
+}
+
+.cand-header p {
+  margin-top: 4px;
+  color: #5f788f;
+  font-size: 13px;
+}
+
+.cand-create-btn {
+  border: 1px solid #0f5b88;
+  background: linear-gradient(120deg, #2c83b8, #216f9f);
+  color: #fff;
+  border-radius: 9px;
+  padding: 10px 15px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cand-create-box {
+  border: 1px solid #d8e6f1;
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cand-create-box input,
+.cand-create-box select {
+  border: 1px solid #cfe1ee;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 13px;
+  outline: none;
+}
+
+.cand-create-box input:focus,
+.cand-create-box select:focus {
+  border-color: #2c83b8;
+  box-shadow: 0 0 0 3px rgba(44, 131, 184, 0.14);
+}
+
+.cand-create-hint {
+  border: 1px dashed #c5dbee;
+  border-radius: 8px;
+  background: #f3f9fe;
+  color: #4e7089;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 9px 10px;
+}
+
+.cand-create-box button {
+  border: 1px solid #1e6f9f;
+  border-radius: 8px;
+  background: #1f73a7;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cand-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 2000;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
+}
+
+.cand-toast.success {
+  background: #dff1ea;
+  border: 1px solid #b9e1cf;
+  color: #1c7a56;
+}
+
+.cand-type-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.cand-type-card {
+  border: 1px solid #d4e5f1;
+  border-radius: 11px;
+  background: #f7fbff;
+  text-align: left;
+  padding: 11px 12px;
+  cursor: pointer;
+  color: #2b5879;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-decoration: none;
+}
+
+.cand-type-card.active {
+  border-color: #2c83b8;
+  box-shadow: 0 0 0 3px rgba(44, 131, 184, 0.14);
+}
+
+.cand-type-card.candidat {
+  background: linear-gradient(120deg, #f3f9ff, #e8f2fa);
+}
+
+.cand-type-card.survey {
+  background: linear-gradient(120deg, #f6fbff, #edf6fd);
+}
+
+.cand-type-card.test {
+  background: linear-gradient(120deg, #f4fbff, #eaf4fc);
+}
+
+.cand-type-card.reintegre {
+  background: linear-gradient(120deg, #f4fbf8, #ebf7f2);
+}
+
+.cand-type-card.contact {
+  background: linear-gradient(120deg, #f9f4ff, #f0e9ff);
+}
+
+.cand-type-count {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  color: #1d5f8b;
+}
+
+.cand-type-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f4467;
+}
+
+.cand-type-card small {
+  font-size: 11px;
+  color: #5f7992;
+}
+
+.cand-filters {
+  border: 1px solid #d8e6f1;
+  border-radius: 12px;
+  background: #fff;
+  padding: 11px;
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(140px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.cand-search-wrap input,
+.cand-filters select {
+  width: 100%;
+  border: 1px solid #cfe1ee;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  outline: none;
+}
+
+.cand-filters select:focus,
+.cand-search-wrap input:focus {
+  border-color: #2c83b8;
+  box-shadow: 0 0 0 3px rgba(44, 131, 184, 0.14);
+}
+
+.cand-filters label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #55728a;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cand-reset {
+  border: 1px solid #c5d8e7;
+  border-radius: 8px;
+  background: #f5f9fd;
+  color: #45647e;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.cand-board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cand-board.single {
+  grid-template-columns: 1fr;
+}
+
+.cand-lane {
+  border: 1px solid #d8e6f1;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+}
+
+.cand-lane-head {
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+  color: #fff;
+}
+
+.cand-lane-head.survey {
+  background: linear-gradient(120deg, #2c83b8, #216f9f);
+}
+
+.cand-lane-head.candidat {
+  background: linear-gradient(120deg, #2d7ea8, #236587);
+}
+
+.cand-lane-head.test {
+  background: linear-gradient(120deg, #3388b8, #23739f);
+}
+
+.cand-lane-head.reintegre {
+  background: linear-gradient(120deg, #2d7f6a, #216c58);
+}
+
+.cand-lane-head.contact {
+  background: linear-gradient(120deg, #7f4ac8, #5f34a4);
+}
+
+.cand-lane-head h3 {
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 3px;
+}
+
+.cand-lane-head p {
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.95;
+}
+
+.cand-lane-head span {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.cand-lane-body {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cand-empty {
+  border: 1px dashed #cbdde9;
+  background: #f7fbff;
+  border-radius: 9px;
+  color: #607c93;
+  font-size: 13px;
+  padding: 14px;
+}
+
+.cand-card {
+  border: 1px solid #d7e6f1;
+  border-radius: 11px;
+  background: #f9fcff;
+  padding: 10px;
+}
+
+.cand-card-top {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.dossier-open {
+  margin-left: auto;
+  border: 1px solid #b8d6e9;
+  border-radius: 7px;
+  background: #edf6fd;
+  color: #1e6f9f;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+
+.cand-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #deedf9;
+  color: #1d6d9e;
+  font-size: 13px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cand-card-top h4 {
+  font-size: 13px;
+  font-weight: 800;
+  color: #173e5b;
+}
+
+.cand-card-top p {
+  margin-top: 1px;
+  font-size: 11px;
+  color: #6b8498;
+}
+
+.cand-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.cand-badges span {
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.cand-badges .legal-badge.ok {
+  background: #def4e9;
+  color: #1f885c;
+}
+
+.cand-badges .legal-badge.ko {
+  background: #fdecec;
+  color: #bf3f3f;
+}
+
+.cand-badges .legal-badge.wait {
+  background: #e8f2fa;
+  color: #4f6f88;
+}
+
+.cand-badges .interview-badge.ok {
+  background: #def4e9;
+  color: #1f885c;
+}
+
+.cand-badges .interview-badge.nok {
+  background: #fdecec;
+  color: #bf3f3f;
+}
+
+.cand-badges .interview-badge.wait {
+  background: #e8f2fa;
+  color: #4f6f88;
+}
+
+.cand-badges .contract-badge.ok {
+  background: #efe6ff;
+  color: #6232a7;
+}
+
+.cand-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cand-meta label {
+  display: block;
+  font-size: 10px;
+  color: #6c879e;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 1px;
+}
+
+.cand-meta strong {
+  font-size: 12px;
+  color: #1f4f73;
+  font-weight: 700;
+}
+
+.cand-remark {
+  grid-column: 1 / -1;
+  border: 1px solid #d4e5f1;
+  border-radius: 8px;
+  background: #f5f9fd;
+  padding: 7px 8px;
+}
+
+.cand-remark.legal-ok {
+  border-color: #bce3cd;
+  background: #ecfaf2;
+}
+
+.cand-remark.legal-ok label {
+  color: #2f7e5a;
+}
+
+.cand-remark.legal-ok strong {
+  color: #1f885c;
+}
+
+.cand-workflow-move {
+  margin-bottom: 8px;
+}
+
+.cand-workflow-move label {
+  display: block;
+  font-size: 10px;
+  color: #6c879e;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.cand-workflow-move select {
+  width: 100%;
+  border: 1px solid #cfe1ee;
+  border-radius: 7px;
+  padding: 7px 9px;
+  font-size: 12px;
+  outline: none;
+}
+
+.cand-legal-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cand-legal-actions button {
+  border-radius: 8px;
+  padding: 7px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.cand-legal-actions .legal-accept {
+  border: 1px solid #bce3cd;
+  background: #ecfaf2;
+  color: #1f885c;
+}
+
+.cand-legal-actions .legal-reject {
+  border: 1px solid #efbcbc;
+  background: #fef1f1;
+  color: #bf3f3f;
+}
+
+.cand-legal-actions .legal-pending {
+  border: 1px solid #c9ddec;
+  background: #f2f7fc;
+  color: #4f6f88;
+}
+
+.cand-interview-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cand-interview-actions button {
+  border-radius: 8px;
+  padding: 7px 8px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.cand-interview-actions .interview-ok {
+  border: 1px solid #bce3cd;
+  background: #ecfaf2;
+  color: #1f885c;
+}
+
+.cand-interview-actions .interview-nok {
+  border: 1px solid #efbcbc;
+  background: #fef1f1;
+  color: #bf3f3f;
+}
+
+.cand-interview-actions button.active {
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08) inset;
+}
+
+.cand-contract-box {
+  border: 1px solid #dbc9f7;
+  border-radius: 10px;
+  background: #faf7ff;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.cand-contract-box h5 {
+  font-size: 12px;
+  color: #5f34a4;
+  font-weight: 800;
+  margin-bottom: 3px;
+}
+
+.cand-contract-box p {
+  font-size: 11px;
+  color: #6f57a8;
+  margin-bottom: 8px;
+}
+
+.cand-contract-docs {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.contract-doc {
+  border: 1px solid #d8c8f4;
+  border-radius: 8px;
+  background: #f4ecff;
+  color: #5f34a4;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.contract-doc.done {
+  border-color: #bce3cd;
+  background: #ecfaf2;
+  color: #1f885c;
+}
+
+.contract-sign {
+  width: 100%;
+  border: 1px solid #d8c8f4;
+  border-radius: 8px;
+  background: #f4ecff;
+  color: #5f34a4;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 7px 8px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.contract-sign.done {
+  border-color: #bce3cd;
+  background: #ecfaf2;
+  color: #1f885c;
+}
+
+.contract-summary {
+  border-radius: 8px;
+  padding: 7px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.contract-summary.ok {
+  border: 1px solid #bce3cd;
+  background: #ecfaf2;
+  color: #1f885c;
+}
+
+.contract-summary.wait {
+  border: 1px solid #d8c8f4;
+  background: #f4ecff;
+  color: #5f34a4;
+}
+
+.contract-validate {
+  width: 100%;
+  border: 1px solid #6d3eb7;
+  border-radius: 8px;
+  background: #6d3eb7;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 7px 8px;
+  cursor: pointer;
+}
+
+.contract-validate.disabled {
+  opacity: 0.5;
+}
+
+.cand-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.action-link {
+  border: 1px solid #bcd7ea;
+  border-radius: 7px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+  background: #edf6fd;
+  color: #1e6f9f;
+}
+
+.action-link.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.delete-link {
+  border: 1px solid #f3c3c3;
+  border-radius: 7px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #fdeeee;
+  color: #b83636;
+  cursor: pointer;
+}
+
+.dossier-link {
+  border: 1px solid #bcd7ea;
+  border-radius: 7px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #edf6fd;
+  color: #1e6f9f;
+  cursor: pointer;
+}
+
+@media (max-width: 1250px) {
+  .cand-board {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 1000px) {
+  .cand-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .cand-create-box {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .cand-type-strip {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .cand-board,
+  .cand-filters,
+  .cand-create-box,
+  .cand-type-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .cand-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cand-create-btn {
+    width: 100%;
+  }
+}
