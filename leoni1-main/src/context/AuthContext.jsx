@@ -1,4 +1,10 @@
 import { createContext, useContext, useState } from "react";
+import {
+  ROLE_ADMIN,
+  ROLE_RECRUTEUR,
+  ROLE_RESPONSABLE_CONTRAT,
+  normalizeRole,
+} from "../utils/roles.js";
 
 const AuthContext = createContext(null);
 
@@ -8,7 +14,7 @@ export const USERS = [
     nom: "Administrateur",
     email: "admin@leoni.com",
     password: "admin123",
-    role: "admin",
+    role: ROLE_ADMIN,
     avatar: "AD",
   },
   {
@@ -16,15 +22,15 @@ export const USERS = [
     nom: "Recruteur RH",
     email: "recruteur@leoni.com",
     password: "recruteur123",
-    role: "recruteur",
+    role: ROLE_RECRUTEUR,
     avatar: "RH",
   },
   {
     id: 3,
-    nom: "Dept. Contrats",
+    nom: "Responsable Contrat",
     email: "contrats@leoni.com",
     password: "contrats123",
-    role: "contrats",
+    role: ROLE_RESPONSABLE_CONTRAT,
     avatar: "CT",
   },
 ];
@@ -35,8 +41,9 @@ export function AuthProvider({ children }) {
   const login = (email, password) => {
     const found = USERS.find(u => u.email === email && u.password === password);
     if (found) {
-      setUser(found);
-      return { success: true, role: found.role };
+      const nextUser = { ...found, role: normalizeRole(found.role) };
+      setUser(nextUser);
+      return { success: true, role: nextUser.role };
     }
     return { success: false };
   };

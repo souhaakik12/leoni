@@ -1,5 +1,6 @@
 import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import { ROLE_RESPONSABLE_CONTRAT, normalizeRole } from "../utils/roles.js";
 
 const pageTitles = {
   "/": { title: "Dashboard", sub: "Vue d'ensemble de votre activite" },
@@ -7,11 +8,7 @@ const pageTitles = {
   "/missions": { title: "Gestion des Missions", sub: "Gerez les missions de recrutement" },
   "/candidats/candidat": {
     title: "Candidats - Entree",
-    sub: "Candidats qui arrivent en direct ou via survey (debut du processus)",
-  },
-  "/candidats/survey": {
-    title: "Candidats - Survey",
-    sub: "Informations personnelles recues (appel + mail dossier)",
+    sub: "Candidats ajoutes directement au debut du processus",
   },
   "/candidats/test": {
     title: "Candidats - Test",
@@ -33,12 +30,16 @@ const pageTitles = {
     title: "Service Contrats - Dossiers",
     sub: "Reception des candidats valides et finalisation contrat",
   },
+  "/contracts/sessions": {
+    title: "Service Contrats - Seances",
+    sub: "Seances d'information contrat et affectation du type CDI/CAIP",
+  },
 };
 
 const roleBadge = {
   admin: { label: "Admin", bg: "#1e40af", color: "#fff" },
   recruteur: { label: "Recruteur", bg: "#7c3aed", color: "#fff" },
-  contrats: { label: "Contrats", bg: "#ea580c", color: "#fff" },
+  [ROLE_RESPONSABLE_CONTRAT]: { label: "Responsable Contrat", bg: "#ea580c", color: "#fff" },
 };
 
 export default function Navbar({ onToggleSidebar }) {
@@ -51,7 +52,7 @@ export default function Navbar({ onToggleSidebar }) {
       ? pageTitles["/candidats/candidat"]
       : null;
   const { title, sub } = pageTitles[pathname] || fallbackCandidats || { title: "LEONI", sub: "" };
-  const badge = roleBadge[user?.role] || {};
+  const badge = roleBadge[normalizeRole(user?.role)] || {};
 
   return (
     <header

@@ -2,18 +2,18 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import leonLogo from "../assets/leon-logo.svg";
+import {
+  ROLE_ADMIN,
+  ROLE_RECRUTEUR,
+  ROLE_RESPONSABLE_CONTRAT,
+  getHomeRouteForRole,
+} from "../utils/roles.js";
 import "./LoginPage.css";
 
-const roleRoutes = {
-  admin: "/",
-  recruteur: "/missions",
-  contrats: "/contracts/reception",
-};
-
 const demoAccounts = [
-  { role: "admin", label: "Admin" },
-  { role: "recruteur", label: "Recruteur" },
-  { role: "contrats", label: "Contrats" },
+  { role: ROLE_ADMIN, label: "Admin" },
+  { role: ROLE_RECRUTEUR, label: "Recruteur" },
+  { role: ROLE_RESPONSABLE_CONTRAT, label: "Responsable Contrat" },
 ];
 
 export default function LoginPage() {
@@ -40,7 +40,7 @@ export default function LoginPage() {
     setLoading(false);
 
     if (result.success) {
-      navigate(roleRoutes[result.role] || "/");
+      navigate(getHomeRouteForRole(result.role));
       return;
     }
 
@@ -53,9 +53,9 @@ export default function LoginPage() {
 
   const fillDemo = (role) => {
     const demos = {
-      admin: { email: "admin@leoni.com", password: "admin123" },
-      recruteur: { email: "recruteur@leoni.com", password: "recruteur123" },
-      contrats: { email: "contrats@leoni.com", password: "contrats123" },
+      [ROLE_ADMIN]: { email: "admin@leoni.com", password: "admin123" },
+      [ROLE_RECRUTEUR]: { email: "recruteur@leoni.com", password: "recruteur123" },
+      [ROLE_RESPONSABLE_CONTRAT]: { email: "contrats@leoni.com", password: "contrats123" },
     };
     setEmail(demos[role].email);
     setPassword(demos[role].password);

@@ -1,0 +1,420 @@
+.dossier-board {
+  background: #ffffff;
+  border: 1px solid #dce3ec;
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.dossier-toast {
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.dossier-toast.info {
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.dossier-toast.success {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.dossier-toast.error {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.dossier-board-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.dossier-board-head h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.dossier-board-head p {
+  margin: 6px 0 0 0;
+  font-size: 13px;
+  color: #64748b;
+  max-width: 760px;
+}
+
+.dossier-board-kpi {
+  min-width: 140px;
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: center;
+}
+
+.dossier-board-kpi strong {
+  display: block;
+  font-size: 20px;
+  line-height: 1;
+  color: #1d4ed8;
+}
+
+.dossier-board-kpi span {
+  font-size: 12px;
+  color: #475569;
+}
+
+.dossier-empty-state {
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 20px;
+  color: #64748b;
+  font-size: 13px;
+  text-align: center;
+  background: #f8fafc;
+}
+
+.dossier-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dossier-card-compact {
+  border: 1px solid #dce3ec;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.dossier-card-compact.expanded {
+  border-color: #bfdbfe;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+}
+
+.dossier-summary-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dossier-summary-top h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.dossier-summary-top p {
+  margin: 4px 0 0 0;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.dossier-head-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.badge {
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.badge.type {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.badge.status.ok {
+  border: 1px solid #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.badge.status.warn {
+  border: 1px solid #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.badge.status.info {
+  border: 1px solid #c7d2fe;
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.summary-progress-row {
+  margin-top: 10px;
+}
+
+.summary-progress-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #475569;
+  margin-bottom: 6px;
+}
+
+.summary-progress-label strong {
+  color: #0f172a;
+}
+
+.dossier-progress-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.dossier-progress-track.compact {
+  height: 7px;
+}
+
+.dossier-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 180ms ease;
+}
+
+.dossier-progress-fill.ok {
+  background: #22c55e;
+}
+
+.dossier-progress-fill.warn {
+  background: #f59e0b;
+}
+
+.summary-main-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-secondary,
+.btn-primary,
+.btn-sign,
+.btn-toggle-docs {
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.btn-secondary {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+}
+
+.btn-toggle-docs {
+  border: 1px solid #1d4ed8;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.btn-primary {
+  border: 1px solid #1d4ed8;
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+.btn-sign {
+  border: 1px solid #0f766e;
+  background: #0f766e;
+  color: #ffffff;
+}
+
+.btn-sign:disabled,
+.btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.dossier-expand-panel {
+  margin-top: 10px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.expand-status-line {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: #475569;
+}
+
+.expand-status-line label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.expand-status-line strong {
+  color: #0f172a;
+}
+
+.dossier-doc-table-wrap {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.dossier-doc-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.dossier-doc-table th,
+.dossier-doc-table td {
+  text-align: left;
+  padding: 10px;
+  border-top: 1px solid #f1f5f9;
+  font-size: 12px;
+}
+
+.dossier-doc-table thead th {
+  border-top: none;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.doc-status {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.doc-status.ok {
+  border: 1px solid #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.doc-status.missing {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.doc-toggle-btn {
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.doc-toggle-btn.ok {
+  border: 1px solid #16a34a;
+  background: #16a34a;
+  color: #ffffff;
+}
+
+.doc-toggle-btn.missing {
+  border: 1px solid #b91c1c;
+  background: #ffffff;
+  color: #b91c1c;
+}
+
+.dossier-expand-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sign-action-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sign-lieu-select {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: #334155;
+  background: #ffffff;
+}
+
+.contract-type-required {
+  width: 100%;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (max-width: 980px) {
+  .dossier-board-head {
+    flex-direction: column;
+  }
+
+  .dossier-summary-top {
+    flex-direction: column;
+  }
+
+  .dossier-head-badges {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 840px) {
+  .dossier-doc-table th,
+  .dossier-doc-table td {
+    padding: 8px;
+    font-size: 11px;
+  }
+
+  .summary-main-actions,
+  .dossier-expand-actions {
+    justify-content: stretch;
+  }
+
+  .sign-action-wrap {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .sign-lieu-select,
+  .btn-sign,
+  .btn-primary,
+  .btn-secondary,
+  .btn-toggle-docs {
+    width: 100%;
+  }
+}

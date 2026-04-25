@@ -13,16 +13,27 @@ import MissionsPage from "./pages/MissionsPage.jsx";
 import ContractsPage from "./pages/ContractsPage.jsx";
 import RecruteurDashboard from "./pages/RecruteurDashboard.jsx";
 import ContractReceptionPage from "./pages/ContractReceptionPage.jsx";
+import ContractSessionsPage from "./pages/ContractSessionsPage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
 import CreateMissionPage from "./pages/CreateMissionPage.jsx";
 import CandidatsPage from "./pages/CandidatsPage.jsx";
 import CandidatDossierPage from "./pages/CandidatDossierPage.jsx";
+import {
+  CONTRACT_ACCESS_ROLES,
+  ROLE_ADMIN,
+  ROLE_RECRUTEUR,
+  ROLE_RESPONSABLE_CONTRAT,
+  getHomeRouteForRole,
+  hasRole,
+} from "./utils/roles.js";
 import "./App.css";
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
-  if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/" replace />;
+  if (allowedRoles && !hasRole(user, allowedRoles)) {
+    return <Navigate to={getHomeRouteForRole(user.role)} replace />;
+  }
   return children;
 }
 
@@ -30,7 +41,6 @@ function AppLayout() {
   const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   if (!user) return <Navigate to="/login" replace />;
-  const homeRoute = { admin: "/", recruteur: "/missions", contrats: "/contracts/reception" };
 
   return (
     <div className="app-layout">
@@ -40,43 +50,46 @@ function AppLayout() {
         <div className="app-content">
           <Routes>
             <Route path="/" element={
-              <ProtectedRoute allowedRoles={["admin"]}><HomePage /></ProtectedRoute>
+              <ProtectedRoute allowedRoles={[ROLE_ADMIN]}><HomePage /></ProtectedRoute>
             } />
             <Route path="/dorms" element={
-              <ProtectedRoute allowedRoles={["admin","recruteur"]}><DormsPage /></ProtectedRoute>
+              <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RECRUTEUR]}><DormsPage /></ProtectedRoute>
             } />
             <Route path="/dorms/:dormId" element={
-              <ProtectedRoute allowedRoles={["admin","recruteur"]}><DormResidentsPage /></ProtectedRoute>
+              <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RECRUTEUR]}><DormResidentsPage /></ProtectedRoute>
             } />
             <Route path="/missions" element={
-              <ProtectedRoute allowedRoles={["admin","recruteur"]}>
-                {user.role === "recruteur" ? <RecruteurDashboard /> : <MissionsPage />}
+              <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RECRUTEUR]}>
+                {hasRole(user, [ROLE_RECRUTEUR]) ? <RecruteurDashboard /> : <MissionsPage />}
               </ProtectedRoute>
             } />
             <Route path="/missions/create" element={
-              <ProtectedRoute allowedRoles={["admin","recruteur"]}><CreateMissionPage /></ProtectedRoute>
+              <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RECRUTEUR]}><CreateMissionPage /></ProtectedRoute>
             } />
             <Route path="/candidats" element={
-              <ProtectedRoute allowedRoles={["admin","recruteur"]}><Navigate to="/candidats/candidat" replace /></ProtectedRoute>
+              <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RECRUTEUR]}><Navigate to="/candidats/candidat" replace /></ProtectedRoute>
             } />
             <Route path="/candidats/:typePage" element={
-              <ProtectedRoute allowedRoles={["admin","recruteur"]}><CandidatsPage /></ProtectedRoute>
+              <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RECRUTEUR]}><CandidatsPage /></ProtectedRoute>
             } />
             <Route path="/candidats/:typePage/:candidatId/dossier" element={
-              <ProtectedRoute allowedRoles={["admin","recruteur","contrats"]}><CandidatDossierPage /></ProtectedRoute>
+              <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RECRUTEUR, ROLE_RESPONSABLE_CONTRAT]}><CandidatDossierPage /></ProtectedRoute>
             } />
             <Route path="/contracts" element={
-              <ProtectedRoute allowedRoles={["admin","contrats"]}>
-                {user.role === "contrats" ? <Navigate to="/contracts/reception" replace /> : <ContractsPage />}
+              <ProtectedRoute allowedRoles={CONTRACT_ACCESS_ROLES}>
+                <ContractsPage />
               </ProtectedRoute>
             } />
             <Route path="/contracts/reception" element={
-              <ProtectedRoute allowedRoles={["admin","contrats"]}><ContractReceptionPage /></ProtectedRoute>
+              <ProtectedRoute allowedRoles={CONTRACT_ACCESS_ROLES}><ContractReceptionPage /></ProtectedRoute>
+            } />
+            <Route path="/contracts/sessions" element={
+              <ProtectedRoute allowedRoles={CONTRACT_ACCESS_ROLES}><ContractSessionsPage /></ProtectedRoute>
             } />
             <Route path="/profile" element={
-              <ProtectedRoute allowedRoles={["recruteur","contrats"]}><ProfilePage /></ProtectedRoute>
+              <ProtectedRoute allowedRoles={[ROLE_RECRUTEUR, ROLE_RESPONSABLE_CONTRAT]}><ProfilePage /></ProtectedRoute>
             } />
-            <Route path="*" element={<Navigate to={homeRoute[user.role] || "/"} replace />} />
+            <Route path="*" element={<Navigate to={getHomeRouteForRole(user.role)} replace />} />
           </Routes>
         </div>
       </div>
@@ -87,8 +100,7 @@ function AppLayout() {
 function LoginPageWrapper() {
   const { user } = useAuth();
   if (user) {
-    const routes = { admin: "/", recruteur: "/missions", contrats: "/contracts/reception" };
-    return <Navigate to={routes[user.role] || "/"} replace />;
+    return <Navigate to={getHomeRouteForRole(user.role)} replace />;
   }
   return <LoginPage />;
 }

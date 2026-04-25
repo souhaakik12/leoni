@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import "./DormResidentsPage.css";
 
-const statusOptions = ["Au foyer", "Malade", "Absente", "Quittée"];
+const STATUS_AU_FOYER = "Au foyer";
+const STATUS_QUITTEE = "Quitt\u00e9e";
+const statusOptions = [STATUS_AU_FOYER, STATUS_QUITTEE];
 const statusStyle = {
-  "Au foyer": { bg: "#dcfce7", color: "#15803d" },
-  "Malade": { bg: "#ffedd5", color: "#c2410c" },
-  "Absente": { bg: "#e5e7eb", color: "#374151" },
-  "Quittée": { bg: "#fee2e2", color: "#dc2626" },
+  [STATUS_AU_FOYER]: { bg: "#dcfce7", color: "#15803d" },
+  Quittee: { bg: "#fee2e2", color: "#dc2626" },
+  [STATUS_QUITTEE]: { bg: "#fee2e2", color: "#dc2626" },
 };
 
 const inputStyle = {
@@ -22,6 +23,10 @@ const inputStyle = {
 };
 
 const NEXT_MONTH_COTISATION = 60;
+const ONE_MONTH_DAYS = 30;
+const CIN_REGEX = /^\d{8}$/;
+const DIGITS_ONLY_REGEX = /^\d+$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function getDayNumber(dateValue) {
   if (!dateValue) return null;
@@ -30,20 +35,135 @@ function getDayNumber(dateValue) {
   return date.getDate();
 }
 
-function computeCotisation(entryDate, exitDate) {
-  const exitDay = getDayNumber(exitDate);
-  if (exitDay !== null) {
-    return exitDay <= 15 ? 30 : 60;
-  }
-
-  const entryDay = getDayNumber(entryDate);
-  if (entryDay === null) return "";
-  return entryDay <= 15 ? 60 : 30;
+function isQuitteeStatus(status) {
+  return String(status ?? "").toLowerCase().includes("quitt");
 }
 
-function computeReste(cotisation) {
-  if (cotisation === "" || cotisation === null || cotisation === undefined) return "";
-  return Number(cotisation) + NEXT_MONTH_COTISATION;
+function normalizeResidentType(type) {
+  const normalized = String(type ?? "").trim().toLowerCase();
+  if (normalized === "ancienne" || normalized === "anciennes") return "ancienne";
+  if (normalized === "nouvelle" || normalized === "nouvelles") return "nouvelle";
+  return "";
+}
+
+function hasCompletedFirstMonth(entryDate) {
+  if (!entryDate) return false;
+  const entry = new Date(entryDate);
+  if (Number.isNaN(entry.getTime())) return false;
+  const now = new Date();
+  const diffMs = now.getTime() - entry.getTime();
+  return diffMs >= ONE_MONTH_DAYS * 24 * 60 * 60 * 1000;
+}
+
+function computeResidentFinance(entryDate, exitDate, type, status) {
+  let normalizedType = normalizeResidentType(type);
+  const exitDay = getDayNumber(exitDate);
+  const entryDay = getDayNumber(entryDate);
+
+  if (!normalizedType) {
+    normalizedType = hasCompletedFirstMonth(entryDate) ? "ancienne" : "nouvelle";
+  }
+
+  if (isQuitteeStatus(status) && exitDay === null) {
+    return { type: normalizedType, cotisation: "", reste: "" };
+  }
+
+  if (isQuitteeStatus(status) && exitDay !== null) {
+    const cotisation = exitDay <= 15 ? 30 : 60;
+    return { type: normalizedType, cotisation, reste: 0 };
+  }
+
+  if (normalizedType === "nouvelle" && hasCompletedFirstMonth(entryDate)) {
+    normalizedType = "ancienne";
+  }
+
+  if (normalizedType === "ancienne") {
+    return { type: "ancienne", cotisation: 60, reste: 0 };
+  }
+
+  if (entryDay === null) {
+    return { type: "nouvelle", cotisation: "", reste: "" };
+  }
+
+  const cotisation = entryDay >= 28 && entryDay <= 31
+    ? 60
+    : entryDay <= 15
+      ? 60
+      : 30;
+  const reste = entryDay >= 28 && entryDay <= 31
+    ? 0
+    : cotisation + NEXT_MONTH_COTISATION;
+
+  return {
+    type: "nouvelle",
+    cotisation,
+    reste,
+  };
+}
+
+function computeCotisation(entryDate, exitDate, type, status) {
+  return computeResidentFinance(entryDate, exitDate, type, status).cotisation;
+}
+
+function computeReste(entryDate, exitDate, type, status) {
+  return computeResidentFinance(entryDate, exitDate, type, status).reste;
+}
+
+function computeResidentType(entryDate, type, status) {
+  if (isQuitteeStatus(status)) {
+    return normalizeResidentType(type) || (hasCompletedFirstMonth(entryDate) ? "ancienne" : "nouvelle");
+  }
+  return computeResidentFinance(entryDate, "", type, status).type;
+}
+
+function getTypeBadge(type, status) {
+  if (isQuitteeStatus(status)) {
+    return { label: STATUS_QUITTEE, bg: "#fee2e2", color: "#dc2626" };
+  }
+  if (normalizeResidentType(type) === "nouvelle") {
+    return { label: "Nouvelle", bg: "#dbeafe", color: "#1d4ed8" };
+  }
+  if (normalizeResidentType(type) === "ancienne") {
+    return { label: "Ancienne", bg: "#dcfce7", color: "#15803d" };
+  }
+  return { label: "-", bg: "#e5e7eb", color: "#374151" };
+}
+
+function formatStatusLabel(status) {
+  return isQuitteeStatus(status) ? STATUS_QUITTEE : STATUS_AU_FOYER;
+}
+
+function safeText(value) {
+  if (value === null || value === undefined) return "-";
+  const text = String(value).trim();
+  return text ? text : "-";
+}
+
+function formatAge(age) {
+  return age !== null && age !== undefined && String(age).trim() !== ""
+    ? `${age} ans`
+    : "-";
+}
+
+function formatDateValue(dateValue) {
+  if (!dateValue) return "-";
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("fr-FR");
+}
+
+function toInputDateValue(dateValue) {
+  if (!dateValue) return "";
+  if (typeof dateValue === "string") {
+    const match = dateValue.trim().match(/^(\d{4}-\d{2}-\d{2})/);
+    if (match) return match[1];
+  }
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function emptyResident() {
@@ -54,12 +174,78 @@ function emptyResident() {
     phone: "",
     parentPhone: "",
     room: "",
-    status: "Au foyer",
+    chambre: "",
+    type: "nouvelle",
+    status: STATUS_AU_FOYER,
     entryDate: "",
     exitDate: "",
     cin: "",
     email: "",
+    cotisation: "",
+    reste: "",
   };
+}
+
+function validateResidentForm(form) {
+  const next = {};
+
+  const fullName = String(form.fullName ?? "").trim();
+  const matricule = String(form.matricule ?? "").trim();
+  const cin = String(form.cin ?? "").trim();
+  const age = String(form.age ?? "").trim();
+  const phone = String(form.phone ?? "").trim();
+  const parentPhone = String(form.parentPhone ?? "").trim();
+  const email = String(form.email ?? "").trim();
+  const status = String(form.status ?? "").trim();
+  const entryDate = String(form.entryDate ?? "").trim();
+  const exitDate = String(form.exitDate ?? "").trim();
+
+  if (!fullName) {
+    next.fullName = "Le nom complet est obligatoire";
+  }
+
+  if (!matricule) {
+    next.matricule = "Le matricule est obligatoire";
+  }
+
+  if (!cin || !CIN_REGEX.test(cin)) {
+    next.cin = "Le CIN doit contenir exactement 8 chiffres";
+  }
+
+  if (age) {
+    const ageNumber = Number(age);
+    if (!Number.isFinite(ageNumber) || ageNumber <= 0) {
+      next.age = "L'âge doit être un nombre positif";
+    }
+  }
+
+  if (phone && !DIGITS_ONLY_REGEX.test(phone)) {
+    next.phone = "Le numéro de téléphone doit contenir uniquement des chiffres";
+  }
+
+  if (parentPhone && !DIGITS_ONLY_REGEX.test(parentPhone)) {
+    next.parentPhone = "Le numéro du parent doit contenir uniquement des chiffres";
+  }
+
+  if (email && !EMAIL_REGEX.test(email)) {
+    next.email = "Email invalide";
+  }
+
+  if (!entryDate) {
+    next.entryDate = "La date d'entrée est obligatoire";
+  }
+
+  if (!status) {
+    next.status = "L'état est obligatoire";
+  } else if (!(status === STATUS_AU_FOYER || status === STATUS_QUITTEE)) {
+    next.status = "L'état doit être 'Au foyer' ou 'Quittée'";
+  }
+
+  if (isQuitteeStatus(status) && !exitDate) {
+    next.exitDate = "La date de sortie est obligatoire pour une résidente quittée";
+  }
+
+  return next;
 }
 
 function normalizeDormId(rawDormId) {
@@ -72,6 +258,10 @@ function normalizeDormId(rawDormId) {
 }
 
 function mapResidentFromApi(r) {
+  const rawStatus = r.etat ?? r.status ?? STATUS_AU_FOYER;
+  const entryDate = toInputDateValue(r.date_entree ?? r.entryDate ?? "");
+  const exitDate = toInputDateValue(r.date_sortie ?? r.exitDate ?? "");
+  const normalizedType = normalizeResidentType(r.type) || (hasCompletedFirstMonth(entryDate) ? "ancienne" : "nouvelle");
   return {
     id: r.id,
     fullName: r.nom_complet ?? r.fullName ?? "",
@@ -79,12 +269,30 @@ function mapResidentFromApi(r) {
     age: r.age ?? "",
     phone: r.telephone ?? r.phone ?? "",
     parentPhone: r.tel_parent ?? r.parentPhone ?? "",
+    chambre: r.chambre ?? r.room ?? "",
     room: r.chambre ?? r.room ?? "",
-    status: r.etat ?? r.status ?? "Au foyer",
-    entryDate: r.date_entree ?? r.entryDate ?? "",
-    exitDate: r.date_sortie ?? r.exitDate ?? "",
+    status: isQuitteeStatus(rawStatus) ? STATUS_QUITTEE : STATUS_AU_FOYER,
+    type: normalizedType,
+    cotisation: r.cotisation ?? "",
+    reste: r.reste ?? "",
+    entryDate,
+    exitDate,
     cin: r.cin ?? "",
     email: r.email ?? "",
+    foyer_id: r.foyer_id ?? r.foyerId ?? "",
+  };
+}
+
+function normalizeResidentFormData(data) {
+  if (!data) return emptyResident();
+  const roomValue = data.room ?? data.chambre ?? "";
+  return {
+    ...emptyResident(),
+    ...data,
+    room: roomValue,
+    chambre: data.chambre ?? roomValue,
+    entryDate: toInputDateValue(data.entryDate),
+    exitDate: toInputDateValue(data.exitDate),
   };
 }
 
@@ -101,38 +309,40 @@ function mapDormFromApi(d) {
 function ResidentFormModal({ initialData, onClose, onSave }) {
   const isEdit = !!initialData?.id;
   const [form, setForm] = useState(
-    initialData ? { ...initialData, exitDate: initialData.exitDate || "" } : emptyResident()
+    normalizeResidentFormData(initialData)
   );
   const [errors, setErrors] = useState({});
   useEffect(() => {
-    setForm(initialData ? { ...initialData, exitDate: initialData.exitDate || "" } : emptyResident());
+    setForm(normalizeResidentFormData(initialData));
   }, [initialData]);
   const autoCotisation = useMemo(
-    () => computeCotisation(form.entryDate, form.exitDate),
-    [form.entryDate, form.exitDate]
+    () => computeCotisation(form.entryDate, form.exitDate, form.type, form.status),
+    [form.entryDate, form.exitDate, form.status, form.type]
   );
 
   const setField = (key, value) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-    if (errors[key]) {
-      setErrors((prev) => ({ ...prev, [key]: "" }));
-    }
+    setForm((prev) => {
+      if (key === "room") {
+        return { ...prev, room: value, chambre: value };
+      }
+      if (key === "status" && !isQuitteeStatus(value)) {
+        return { ...prev, status: value, exitDate: "" };
+      }
+      return { ...prev, [key]: value };
+    });
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (next[key]) next[key] = "";
+      if (key === "status" && !isQuitteeStatus(value) && next.exitDate) {
+        next.exitDate = "";
+      }
+      return next;
+    });
   };
 
-  const validate = () => {
-    const next = {};
-    if (!form.fullName.trim()) next.fullName = "Required";
-    if (!String(form.age).trim()) next.age = "Required";
-    if (!form.phone.trim()) next.phone = "Required";
-    if (!form.parentPhone.trim()) next.parentPhone = "Required";
-    if (!form.room.trim()) next.room = "Required";
-    if (!form.entryDate) next.entryDate = "Required";
-    return next;
-  };
-
-  const handleSave = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const v = validate();
+    const v = validateResidentForm(form);
     if (Object.keys(v).length > 0) {
       setErrors(v);
       return;
@@ -177,7 +387,7 @@ function ResidentFormModal({ initialData, onClose, onSave }) {
           </button>
         </div>
 
-        <form onSubmit={handleSave}>
+        <form onSubmit={handleSubmit}>
           <div style={{ padding: "20px 22px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, maxHeight: "70vh", overflowY: "auto" }}>
           {[
             { key: "fullName", label: "Nom complet", type: "text" },
@@ -216,6 +426,7 @@ function ResidentFormModal({ initialData, onClose, onSave }) {
                 </option>
               ))}
             </select>
+            {errors.status && <p style={{ fontSize: 10, color: "#dc2626", marginTop: 2 }}>{errors.status}</p>}
           </div>
 
           <div>
@@ -236,7 +447,7 @@ function ResidentFormModal({ initialData, onClose, onSave }) {
               {autoCotisation === "" ? "-" : `${autoCotisation} DT`}
             </div>
             <p style={{ fontSize: 10, color: "#6b7280", marginTop: 4 }}>
-              Entree 1-15 = 60 DT, Entree 16+ = 30 DT, Sortie 1-15 = 30 DT, Sortie 16+ = 60 DT.
+              Nouvelle: 1-15 = 60/120, 16-27 = 30/90, 28-31 = 60/0. Ancienne: 60/0.
             </p>
           </div>
           </div>
@@ -265,6 +476,7 @@ export default function DormResidentsPage() {
   const [residents, setResidents] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingResident, setEditingResident] = useState(null);
+  const [residentFilter, setResidentFilter] = useState("all");
 
   useEffect(() => {
     let isMounted = true;
@@ -312,7 +524,6 @@ export default function DormResidentsPage() {
 
         const data = await res.json();
         const rows = Array.isArray(data) ? data : [];
-        console.log("Residents API matricules:", rows.map((r) => r.matricule));
         if (isMounted) {
           setResidents(rows.map(mapResidentFromApi));
         }
@@ -333,9 +544,26 @@ export default function DormResidentsPage() {
     };
   }, [normalizedDormId]);
 
+  const safeResidents = Array.isArray(residents) ? residents : [];
+  const filteredResidents = useMemo(() => {
+    return safeResidents.filter((r) => {
+      const effectiveType = computeResidentType(r.entryDate, r.type, r.status);
+      if (residentFilter === "nouvelle") {
+        return effectiveType === "nouvelle" && !isQuitteeStatus(r.status);
+      }
+      if (residentFilter === "ancienne") {
+        return effectiveType === "ancienne" && !isQuitteeStatus(r.status);
+      }
+      if (residentFilter === "quittee") {
+        return isQuitteeStatus(r.status);
+      }
+      return true;
+    });
+  }, [safeResidents, residentFilter]);
+
   const stats = useMemo(() => {
     const total = foyer?.capacite || 0;
-    const occupied = residents.length;
+    const occupied = safeResidents.filter((r) => !isQuitteeStatus(r.status)).length;
     const available = Math.max(total - occupied, 0);
     const ratio = total > 0 ? (occupied / total) * 100 : 0;
     return {
@@ -344,7 +572,7 @@ export default function DormResidentsPage() {
       available,
       ratio: ratio.toFixed(1),
     };
-  }, [foyer, residents]);
+  }, [foyer, safeResidents]);
 
   const startCreate = () => {
     setEditingResident(null);
@@ -357,7 +585,7 @@ export default function DormResidentsPage() {
   };
 
   const handleDelete = async (id) => {
-    const residentToDelete = residents.find((r) => r.id === id);
+    const residentToDelete = safeResidents.find((r) => r.id === id);
     if (!window.confirm(`Supprimer ${residentToDelete?.fullName || "cette residente"} ?`)) return;
 
     try {
@@ -376,30 +604,41 @@ export default function DormResidentsPage() {
   };
 
   const handleSave = async (formData) => {
-    console.log("Saving:", formData);
+    const entryDate = toInputDateValue(formData.entryDate);
     const resolvedExitDate =
-      formData.status === "Quittée" && !formData.exitDate
-        ? new Date().toISOString().slice(0, 10)
-        : formData.exitDate;
-    const cotisation = computeCotisation(formData.entryDate, resolvedExitDate);
-    const reste = computeReste(cotisation);
+      isQuitteeStatus(formData.status)
+        ? toInputDateValue(formData.exitDate) || null
+        : null;
+    const baseType = editingResident
+      ? normalizeResidentType(editingResident.type) || "nouvelle"
+      : "nouvelle";
+    const finance = computeResidentFinance(
+      entryDate,
+      resolvedExitDate,
+      baseType,
+      formData.status
+    );
+    const editFoyerId = Number(editingResident?.foyer_id);
+    const resolvedFoyerId = editingResident && Number.isFinite(editFoyerId) && editFoyerId > 0
+      ? editFoyerId
+      : Number(normalizedDormId);
     const payload = {
       nom_complet: formData.fullName,
       matricule: String(formData.matricule ?? "").trim(),
       age: formData.age,
       telephone: formData.phone,
       tel_parent: formData.parentPhone,
-      chambre: formData.room,
-      etat: formData.status,
-      date_entree: formData.entryDate,
+      chambre: formData.chambre ?? formData.room,
+      etat: isQuitteeStatus(formData.status) ? "Quittee" : STATUS_AU_FOYER,
+      type: finance.type,
+      date_entree: entryDate,
       date_sortie: resolvedExitDate || null,
       cin: formData.cin,
       email: formData.email,
-      foyer_id: normalizedDormId,
-      cotisation,
-      reste,
+      foyer_id: resolvedFoyerId,
+      cotisation: finance.cotisation,
+      reste: finance.reste,
     };
-    console.log("Saving resident matricule:", payload.matricule);
 
     const url = editingResident
       ? `http://localhost:3000/api/resident/${editingResident.id}`
@@ -420,33 +659,13 @@ export default function DormResidentsPage() {
         console.error("Save API error:", errorBody);
         throw new Error(`Save failed with status ${saveRes.status}`);
       }
-      let apiResident = null;
-      try {
-        const data = await saveRes.json();
-        if (data && typeof data === "object" && "id" in data) {
-          apiResident = mapResidentFromApi(data);
-          console.log("Resident save response matricule:", data.matricule);
-        }
-      } catch {
-        apiResident = null;
+      const residentsRes = await fetch(`http://localhost:3000/api/resident/${normalizedDormId}`);
+      if (!residentsRes.ok) {
+        throw new Error(`Reload failed with status ${residentsRes.status}`);
       }
-
-      if (apiResident) {
-        if (editingResident) {
-          setResidents((prev) => prev.map((r) => (r.id === editingResident.id ? apiResident : r)));
-        } else {
-          setResidents((prev) => [...prev, apiResident]);
-        }
-      } else {
-        const residentsRes = await fetch(`http://localhost:3000/api/resident/${normalizedDormId}`);
-        if (!residentsRes.ok) {
-          throw new Error(`Reload failed with status ${residentsRes.status}`);
-        }
-
-        const data = await residentsRes.json();
-        const rows = Array.isArray(data) ? data : [];
-        setResidents(rows.map(mapResidentFromApi));
-      }
+      const data = await residentsRes.json();
+      const rows = Array.isArray(data) ? data : [];
+      setResidents(rows.map(mapResidentFromApi));
 
       setShowForm(false);
       setEditingResident(null);
@@ -512,47 +731,85 @@ export default function DormResidentsPage() {
 
       <div className="dorm-panel">
         <div className="dorm-panel-head">
-          <h3>Residentes Actives ({residents.length})</h3>
+          <h3>Residentes Actives ({filteredResidents.length})</h3>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+            {[
+              { key: "all", label: "All" },
+              { key: "nouvelle", label: "Nouvelles" },
+              { key: "ancienne", label: "Anciennes" },
+              { key: "quittee", label: "Quittées" },
+            ].map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setResidentFilter(f.key)}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: residentFilter === f.key ? "1px solid #2563eb" : "1px solid #d1d5db",
+                  background: residentFilter === f.key ? "#eff6ff" : "#fff",
+                  color: residentFilter === f.key ? "#1d4ed8" : "#4b5563",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="dorm-table-wrap">
           <table className="dorm-table">
             <thead>
               <tr>
-                {["NOM COMPLET", "MATRICULE", "AGE", "TELEPHONE", "TEL. PARENT", "CHAMBRE", "ETAT", "COTISATION", "RESTE", "DATE D'ENTREE", "DATE DE SORTIE", "ACTIONS"].map((h) => (
+                {["NOM COMPLET", "MATRICULE", "AGE", "TELEPHONE", "TEL. PARENT", "CHAMBRE", "TYPE", "ETAT", "COTISATION", "RESTE", "DATE D'ENTREE", "DATE DE SORTIE", "ACTIONS"].map((h) => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {residents.length === 0 ? (
+              {filteredResidents.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="dorm-empty-cell">
+                  <td colSpan={13} className="dorm-empty-cell">
                     Aucune residente pour le moment.
                   </td>
                 </tr>
               ) : (
-                residents.map((r, i) => {
-                  const st = statusStyle[r.status] || statusStyle["Absente"];
-                  const cotisation = computeCotisation(r.entryDate, r.exitDate);
-                  const reste = computeReste(cotisation);
+                filteredResidents.map((r, i) => {
+                  const st = isQuitteeStatus(r.status)
+                    ? { bg: "#fee2e2", color: "#dc2626" }
+                    : statusStyle[r.status] || statusStyle["Au foyer"];
+                  const finance = computeResidentFinance(
+                    r.entryDate,
+                    r.exitDate,
+                    r.type,
+                    r.status
+                  );
+                  const typeBadge = getTypeBadge(finance.type, r.status);
                   return (
-                    <tr key={r.id} className="dorm-row" style={{ borderBottom: i < residents.length - 1 ? "1px solid #e5e7eb" : "none" }}>
-                      <td className="dorm-name-cell">{r.fullName}</td>
-                      <td>{String(r.matricule ?? "").trim() || "-"}</td>
-                      <td>{r.age} ans</td>
-                      <td className="dorm-phone-cell">{r.phone}</td>
-                      <td>{r.parentPhone}</td>
-                      <td className="dorm-room-cell">{r.room}</td>
+                    <tr key={r.id} className="dorm-row" style={{ borderBottom: i < filteredResidents.length - 1 ? "1px solid #e5e7eb" : "none" }}>
+                      <td className="dorm-name-cell">{safeText(r.fullName)}</td>
+                      <td>{safeText(r.matricule)}</td>
+                      <td>{formatAge(r.age)}</td>
+                      <td className="dorm-phone-cell">{safeText(r.phone)}</td>
+                      <td>{safeText(r.parentPhone)}</td>
+                      <td className="dorm-room-cell">{safeText(r.chambre ?? r.room)}</td>
                       <td>
-                        <span style={{ background: st.bg, color: st.color, borderRadius: 999, padding: "5px 12px", fontSize: 12, fontWeight: 700 }}>
-                          {r.status}
+                        <span style={{ background: typeBadge.bg, color: typeBadge.color, borderRadius: 999, padding: "5px 12px", fontSize: 12, fontWeight: 700 }}>
+                          {typeBadge.label}
                         </span>
                       </td>
-                      <td className="dorm-money-success">{cotisation === "" ? "-" : `${cotisation} DT`}</td>
-                      <td className="dorm-money-alert">{reste === "" ? "-" : `${reste} DT`}</td>
-                      <td>{new Date(r.entryDate).toLocaleDateString("fr-FR")}</td>
-                      <td>{r.exitDate ? new Date(r.exitDate).toLocaleDateString("fr-FR") : "-"}</td>
+                      <td>
+                        <span style={{ background: st.bg, color: st.color, borderRadius: 999, padding: "5px 12px", fontSize: 12, fontWeight: 700 }}>
+                          {formatStatusLabel(r.status)}
+                        </span>
+                      </td>
+                      <td className="dorm-money-success">{finance.cotisation === "" ? "-" : `${finance.cotisation} DT`}</td>
+                      <td className="dorm-money-alert">{finance.reste === "" ? "-" : `${finance.reste} DT`}</td>
+                      <td>{formatDateValue(r.entryDate)}</td>
+                      <td>{formatDateValue(r.exitDate)}</td>
                       <td>
                         <div className="dorm-actions">
                           <button onClick={() => handleEdit(r)} title="Modifier" className="dorm-icon-btn dorm-icon-edit">
@@ -585,4 +842,3 @@ export default function DormResidentsPage() {
     </div>
   );
 }
-

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NavLink, useNavigate, useParams } from "react-router-dom";
 import { useRecrutements } from "../context/RecrutementsContext.jsx";
 import "./CandidatsPage.css";
@@ -13,6 +13,7 @@ const AVIS_ATTENTE = "PAS_DE_REPONSE";
 const ENTRETIEN_OK = "OK";
 const ENTRETIEN_NOK = "NOK";
 const ENTRETIEN_ATTENTE = "EN_ATTENTE";
+const TYPE_CANDIDAT_CONTRACT_SESSION = "contract_session_pending";
 const statutChoices = ["Tous", STATUS_NOUVEAU, STATUS_REINTEGRE, STATUS_ACCEPTE, STATUS_REFUSE];
 
 const candidateTypes = [
@@ -20,18 +21,9 @@ const candidateTypes = [
     id: "candidat",
     short: "Candidat",
     title: "Candidat (entree)",
-    desc: "Personne venue chercher travail, en direct ou via survey. Debut du processus.",
+    desc: "Personne ajoutee directement au debut du processus de recrutement.",
     headerClass: "candidat",
     badgeBg: "#e8f2fa",
-    badgeColor: "#1d6d9e",
-  },
-  {
-    id: "survey_ready",
-    short: "Survey",
-    title: "Survey remplie",
-    desc: "Candidat ayant rempli le formulaire. Agent recrutement: appel + mail dossier.",
-    headerClass: "survey",
-    badgeBg: "#deedf9",
     badgeColor: "#1d6d9e",
   },
   {
@@ -57,7 +49,6 @@ const candidateTypes = [
 const typeMap = Object.fromEntries(candidateTypes.map((type) => [type.id, type]));
 const typeToRoute = {
   candidat: "candidat",
-  survey_ready: "survey",
   test_passed: "test",
   reintegrated_pending: "reintegres",
 };
@@ -116,8 +107,12 @@ const postes = [
   "Technicien maintenance",
   "Operateur production",
 ];
+const MAX_CIN_LENGTH = 8;
+const MAX_PHONE_LENGTH = 8;
+const MAX_AGE_LENGTH = 2;
 
 function inferCandidateType(candidat) {
+  if (candidat.typeCandidat === TYPE_CANDIDAT_CONTRACT_SESSION) return TYPE_CANDIDAT_CONTRACT_SESSION;
   if (candidat.typeCandidat === "contact_contract") return "contact_contract";
   if (typeMap[candidat.typeCandidat]) return candidat.typeCandidat;
   if (candidat.entretienResult === ENTRETIEN_OK) return "contact_contract";
@@ -130,7 +125,6 @@ function inferCandidateType(candidat) {
 function normalizeBeforeSave(candidate) {
   const next = { ...candidate };
   next.typeCandidat = typeMap[next.typeCandidat] ? next.typeCandidat : inferCandidateType(next);
-  if (next.typeCandidat === "survey_ready") next.posteVise = "";
   if (![ENTRETIEN_OK, ENTRETIEN_NOK, ENTRETIEN_ATTENTE].includes(next.entretienResult)) {
     next.entretienResult = ENTRETIEN_ATTENTE;
   }
@@ -158,7 +152,7 @@ function normalizeBeforeSave(candidate) {
     next.avisJuridique = "";
   }
 
-  if (!next.canalEntree) next.canalEntree = "Direct";
+  next.canalEntree = normalizeCanalEntree(next.canalEntree);
   return next;
 }
 
@@ -182,9 +176,102 @@ function addRemark(existingNotes, remark) {
   return `${current} | ${cleanRemark}`;
 }
 
+function normalizeCanalEntree(value) {
+  const label = String(value || "").trim();
+  if (!label) return "Candidat";
+
+  const normalized = label
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  if (normalized === "direct" || normalized === "survey" || normalized === "candidat") {
+    return "Candidat";
+  }
+
+  return label;
+}
+
+function sanitizeDigits(value, maxLength) {
+  return String(value || "")
+    .replace(/\D/g, "")
+    .slice(0, maxLength);
+}
+
 function phoneHref(phone) {
   const digits = (phone || "").replace(/[^0-9+]/g, "");
   return digits ? `tel:${digits}` : "";
+}
+
+function buildCandidateFormValues(source = {}) {
+  return {
+    nom: String(source.nom || source.nomComplet || ""),
+    cin: sanitizeDigits(source.cin, MAX_CIN_LENGTH),
+    telephone: sanitizeDigits(source.telephone, MAX_PHONE_LENGTH),
+    age: sanitizeDigits(source.age, MAX_AGE_LENGTH),
+    niveauScolaire: String(source.niveauScolaire || source.niveau_scolaire || source.niveauEtudes || ""),
+    poste: String(source.poste || source.posteVise || postes[0] || ""),
+    adresse: String(source.adresse || ""),
+  };
+}
+
+function validateCandidateFields(values) {
+  const nextErrors = {};
+  const trimmedNom = values.nom.trim();
+  const trimmedCin = values.cin.trim();
+  const trimmedTelephone = values.telephone.trim();
+  const trimmedAge = values.age.trim();
+  const trimmedNiveau = values.niveauScolaire.trim();
+  const trimmedPoste = values.poste.trim();
+  const trimmedAdresse = values.adresse.trim();
+
+  if (!trimmedNom) {
+    nextErrors.nom = "Le nom complet est obligatoire.";
+  }
+
+  if (!trimmedCin) {
+    nextErrors.cin = "Le CIN est obligatoire.";
+  } else if (!/^\d{8}$/.test(trimmedCin)) {
+    nextErrors.cin = "Le CIN doit contenir exactement 8 chiffres.";
+  }
+
+  if (!trimmedTelephone) {
+    nextErrors.telephone = "Le telephone est obligatoire.";
+  } else if (!/^\d{8}$/.test(trimmedTelephone)) {
+    nextErrors.telephone = "Le telephone doit contenir exactement 8 chiffres.";
+  }
+
+  if (!trimmedAge) {
+    nextErrors.age = "L'age est obligatoire.";
+  } else if (!/^\d+$/.test(trimmedAge) || Number(trimmedAge) <= 0) {
+    nextErrors.age = "L'age doit etre un nombre valide.";
+  }
+
+  if (!trimmedNiveau) {
+    nextErrors.niveauScolaire = "Le niveau scolaire est obligatoire.";
+  }
+
+  if (!trimmedPoste) {
+    nextErrors.poste = "Le poste est obligatoire.";
+  }
+
+  if (!trimmedAdresse) {
+    nextErrors.adresse = "L'adresse est obligatoire.";
+  }
+
+  return nextErrors;
+}
+
+function buildCandidatePayload(values) {
+  return {
+    nom: values.nom.trim(),
+    cin: values.cin.trim(),
+    telephone: values.telephone.trim(),
+    age: Number(values.age.trim()),
+    niveau_scolaire: values.niveauScolaire.trim(),
+    poste: values.poste.trim(),
+    adresse: values.adresse.trim(),
+  };
 }
 
 function getEntretienMeta(value) {
@@ -192,36 +279,106 @@ function getEntretienMeta(value) {
   if (value === ENTRETIEN_NOK) return { label: "Entretien NOK", className: "nok" };
   return { label: "Entretien en attente", className: "wait" };
 }
+function mapApiCandidate(candidate) {
+  const etape = String(candidate?.etape || "CANDIDATURE").trim().toUpperCase();
 
+  let typeCandidat = "candidat";
+
+  if (etape === "TEST_ENTRETIEN") {
+    typeCandidat = "test_passed";
+  } else if (etape === "REINTEGRATION") {
+    typeCandidat = "reintegrated_pending";
+  } else if (etape === "SEANCE_INFO") {
+    typeCandidat = TYPE_CANDIDAT_CONTRACT_SESSION;
+  } else if (etape === "DOSSIER_CONTRAT") {
+    typeCandidat = "contact_contract";
+  }
+
+  const statut =
+    (candidate?.statut || "").trim() ||
+    (etape === "SEANCE_INFO"
+      ? "En attente seance contrat"
+      : etape === "DOSSIER_CONTRAT"
+      ? "EN_ATTENTE_DOSSIER"
+      : typeCandidat === "reintegrated_pending"
+      ? STATUS_REINTEGRE
+      : STATUS_NOUVEAU);
+
+  const entretienResult = etape === "SEANCE_INFO" || etape === "DOSSIER_CONTRAT" ? ENTRETIEN_OK : ENTRETIEN_ATTENTE;
+
+  return normalizeBeforeSave({
+    id: candidate?.id,
+    nomComplet: candidate?.nom || "",
+    cin: candidate?.cin || "",
+    telephone: candidate?.telephone || "",
+    age: candidate?.age ? String(candidate.age) : "",
+    adresse: candidate?.adresse || "",
+    niveauEtudes: candidate?.niveauEtudes || candidate?.niveau_etudes || candidate?.niveau_scolaire || "",
+    posteVise: candidate?.poste || "",
+    canalEntree: normalizeCanalEntree(candidate?.canalEntree || candidate?.canal),
+
+    // ✅ AJOUT IMPORTANT
+    etape: etape,
+
+    typeCandidat,
+    statut,
+    email: "",
+    gouvernoratResidence: "",
+    avisJuridique: "",
+    notes: "",
+    entretienResult,
+    documentsContrat: {},
+    contratSigne: false,
+    contratValide: false,
+  });
+}
 export default function CandidatsPage() {
   const { typePage = "candidat" } = useParams();
   const navigate = useNavigate();
-  const { candidats, addCandidat, updateCandidat, deleteCandidat } = useRecrutements();
+  const { refreshCandidatsFromApi } = useRecrutements();
   const currentTypeId = routeToType[typePage] || "candidat";
   const currentType = typeMap[currentTypeId];
-  const showPosteField = currentTypeId !== "survey_ready";
 
+  const [candidats, setCandidats] = useState([]);
   const [search, setSearch] = useState("");
   const [filtreGouv, setFiltreGouv] = useState("Tous");
   const [filtreNiveau, setFiltreNiveau] = useState("Tous");
   const [filtreStatut, setFiltreStatut] = useState("Tous");
+  const [nom, setNom] = useState("");
+  const [cin, setCin] = useState("");
+  const [telephone, setTelephone] = useState("");
+  const [age, setAge] = useState("");
+  const [niveauScolaire, setNiveauScolaire] = useState("");
+  const [poste, setPoste] = useState(postes[0] || "");
+  const [adresse, setAdresse] = useState("");
+  const [errors, setErrors] = useState({});
+  const [submissionMessage, setSubmissionMessage] = useState("");
 
   const [showCreate, setShowCreate] = useState(false);
   const [toast, setToast] = useState("");
-  const [draft, setDraft] = useState({
-    nomComplet: "",
-    cin: "",
-    telephone: "",
-    email: "",
-    canalEntree: "Direct",
-    targetType: "candidat",
-    gouvernoratResidence: "",
-    niveauEtudes: "",
-    posteVise: postes[0],
-  });
+  const [editCandidateId, setEditCandidateId] = useState(null);
+  const [editForm, setEditForm] = useState(() => buildCandidateFormValues());
+  const [editErrors, setEditErrors] = useState({});
+  const [editMessage, setEditMessage] = useState("");
 
-  const createTypeId = typeMap[draft.targetType] ? draft.targetType : currentTypeId;
-  const createHasPoste = createTypeId !== "survey_ready";
+  const fetchCandidats = async () => {
+    try {
+      const res = await fetch("http://localhost:3000/api/candidats");
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.message || "Impossible de charger les candidats.");
+      }
+      const next = Array.isArray(data) ? data.map((candidate) => mapApiCandidate(candidate)) : [];
+      setCandidats(next);
+    } catch (error) {
+      const message = error?.message || "Erreur reseau pendant le chargement des candidats.";
+      setSubmissionMessage(message);
+    }
+  };
+
+  useEffect(() => {
+    fetchCandidats();
+  }, []);
 
   const candidatsNormalized = useMemo(
     () => candidats.map((c) => ({ ...c, typeCandidat: inferCandidateType(c) })),
@@ -237,8 +394,11 @@ export default function CandidatsPage() {
           c.nomComplet,
           c.cin,
           c.telephone,
+          c.age,
+          c.adresse,
           c.email,
           c.gouvernoratResidence,
+          c.niveauEtudes,
           c.posteVise,
           c.avisJuridique,
           c.statut,
@@ -272,9 +432,65 @@ export default function CandidatsPage() {
     setTimeout(() => setToast(""), timeout);
   };
 
-  const moveToType = (candidate, nextType) => {
-    updateCandidat(normalizeBeforeSave({ ...candidate, typeCandidat: nextType }));
-    pushToast(`${candidate.nomComplet} passe vers ${typeMap[nextType].short}.`);
+  const updateCandidat = (updated) => {
+    setCandidats((prev) =>
+      prev.map((candidate) =>
+        candidate.id === updated.id ? normalizeBeforeSave(updated) : candidate
+      )
+    );
+  };
+
+  const removeCandidateFromState = (candidateId) => {
+    setCandidats((prev) => prev.filter((candidate) => candidate.id !== candidateId));
+  };
+
+  const sendToTest = async (candidate) => {
+    try {
+      const response = await fetch(`http://localhost:3000/api/candidats/${candidate.id}/etape`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ etape: "TEST_ENTRETIEN" }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.message || "Erreur lors du changement d'etape.");
+      }
+
+      await fetchCandidats();
+      if (typeof refreshCandidatsFromApi === "function") {
+        await refreshCandidatsFromApi();
+      }
+      pushToast(`${candidate.nomComplet} passe a l'etape: Test / Entretien`);
+    } catch (error) {
+      console.error(error);
+      pushToast(error?.message || "Erreur lors du changement d'etape.");
+    }
+  };
+
+  const handleEntretienOK = async (candidate) => {
+    const response = await fetch(`http://localhost:3000/api/candidats/${candidate.id}/etape`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        etape: "SEANCE_INFO",
+        statut: "En attente seance contrat",
+      }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.message || "Erreur lors de la mise a jour entretien.");
+    }
+
+    await fetchCandidats();
+    if (typeof refreshCandidatsFromApi === "function") {
+      await refreshCandidatsFromApi();
+    }
   };
 
   const setLegalDecision = (candidate, decision) => {
@@ -309,18 +525,20 @@ export default function CandidatsPage() {
     pushToast(msg);
   };
 
-  const setEntretienResult = (candidate, result) => {
-    if (result === ENTRETIEN_OK) {
-      const next = normalizeBeforeSave({
-        ...candidate,
-        typeCandidat: "contact_contract",
-        entretienResult: ENTRETIEN_OK,
-        statut: STATUS_ACCEPTE,
-      });
-      updateCandidat(next);
-      pushToast(`Entretien OK: ${candidate.nomComplet} envoye au service Contrats.`);
-      return;
+ const setEntretienResult = async (candidate, result) => {
+  if (result === ENTRETIEN_OK) {
+    try {
+      await handleEntretienOK(candidate);
+      pushToast(`Entretien OK: ${candidate.nomComplet}`);
+    } catch (error) {
+      console.error(error);
+      pushToast(error?.message || "Erreur lors de la mise a jour entretien.");
     }
+
+    return;
+  }
+
+
 
     const nextStatut = result === ENTRETIEN_NOK ? STATUS_REFUSE : STATUS_NOUVEAU;
     const next = normalizeBeforeSave({
@@ -343,42 +561,195 @@ export default function CandidatsPage() {
     navigate(`/candidats/test/${candidateId}/dossier`);
   };
 
-  const createCandidate = () => {
-    if (!draft.nomComplet.trim() || !draft.cin.trim() || !draft.telephone.trim()) return;
-    const canal = createTypeId === "survey_ready" ? "Survey" : draft.canalEntree || "Direct";
-    const payload = normalizeBeforeSave({
-      ...draft,
-      typeCandidat: createTypeId,
-      canalEntree: canal,
-      posteVise: createHasPoste ? draft.posteVise : "",
-      dateNaissance: "",
-      sexe: "Homme",
-      adresse: "",
-      delegation: "",
-      gouvernoratOrigine: "",
-      villeOrigine: "",
-      specialite: "",
-      etablissement: "",
-      missionId: "",
-      notes: "",
-      statut: STATUS_NOUVEAU,
-      entretienResult: ENTRETIEN_ATTENTE,
-      documentsContrat: {},
-      contratSigne: false,
-      contratValide: false,
+  const clearFieldError = (fieldName) => {
+    setErrors((prev) => {
+      if (!prev[fieldName]) return prev;
+      const next = { ...prev };
+      delete next[fieldName];
+      return next;
     });
-    addCandidat(payload);
+  };
+
+  const clearEditFieldError = (fieldName) => {
+    setEditErrors((prev) => {
+      if (!prev[fieldName]) return prev;
+      const next = { ...prev };
+      delete next[fieldName];
+      return next;
+    });
+  };
+
+  const startEditCandidate = (candidate) => {
+    setEditCandidateId(candidate.id);
+    setEditForm(buildCandidateFormValues(candidate));
+    setEditErrors({});
+    setEditMessage("");
+  };
+
+  const cancelEditCandidate = () => {
+    setEditCandidateId(null);
+    setEditForm(buildCandidateFormValues());
+    setEditErrors({});
+    setEditMessage("");
+  };
+
+  const resetCreateForm = () => {
+    setNom("");
+    setCin("");
+    setTelephone("");
+    setAge("");
+    setNiveauScolaire("");
+    setPoste(postes[0] || "");
+    setAdresse("");
+    setErrors({});
+    setSubmissionMessage("");
+  };
+
+  const validateForm = () => {
+    const nextErrors = validateCandidateFields({
+      nom,
+      cin,
+      telephone,
+      age,
+      niveauScolaire,
+      poste,
+      adresse,
+    });
+    setErrors(nextErrors);
+    const isValid = Object.keys(nextErrors).length === 0;
+    setSubmissionMessage(isValid ? "" : "Veuillez corriger les champs obligatoires avant d'ajouter le candidat.");
+    return isValid;
+  };
+
+  const validateEditForm = () => {
+    const nextErrors = validateCandidateFields(editForm);
+    setEditErrors(nextErrors);
+    const isValid = Object.keys(nextErrors).length === 0;
+    setEditMessage(isValid ? "" : "Veuillez corriger les champs obligatoires avant de modifier le candidat.");
+    return isValid;
+  };
+
+  const createCandidate = () => {
     setShowCreate(false);
-    setDraft((p) => ({
-      ...p,
-      nomComplet: "",
-      cin: "",
-      telephone: "",
-      email: "",
-      canalEntree: "Direct",
-      targetType: currentTypeId,
-    }));
+    resetCreateForm();
     pushToast("Nouveau candidat ajoute.");
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmissionMessage("");
+    if (!validateForm()) {
+      return;
+    }
+
+    const data = buildCandidatePayload({
+      nom,
+      cin,
+      telephone,
+      age,
+      niveauScolaire,
+      poste,
+      adresse,
+    });
+
+    try {
+      const response = await fetch("http://localhost:3000/api/candidats", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+
+      const text = await response.text();
+console.log("Réponse brute edit :", text);
+
+let result = {};
+try {
+  result = text ? JSON.parse(text) : {};
+} catch (e) {
+  throw new Error("Le serveur renvoie du HTML au lieu de JSON.");
+}
+
+if (!response.ok) {
+  throw new Error(result?.message || "Erreur lors de la modification du candidat.");
+}
+
+      await fetchCandidats();
+      if (typeof refreshCandidatsFromApi === "function") {
+        await refreshCandidatsFromApi();
+      }
+      createCandidate();
+    } catch (error) {
+      const message = error?.message || "Erreur reseau.";
+      setSubmissionMessage(message);
+      pushToast(message);
+    }
+  };
+
+  const handleEditSubmit = async (e, candidateId) => {
+    e.preventDefault();
+    setEditMessage("");
+
+    if (!validateEditForm()) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/candidats/${candidateId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(buildCandidatePayload(editForm)),
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result?.message || "Erreur lors de la modification du candidat.");
+      }
+
+      await fetchCandidats();
+      if (typeof refreshCandidatsFromApi === "function") {
+        await refreshCandidatsFromApi();
+      }
+      cancelEditCandidate();
+      pushToast("Candidat modifie avec succes.");
+    } catch (error) {
+      const message = error?.message || "Erreur reseau lors de la modification.";
+      setEditMessage(message);
+      pushToast(message);
+    }
+  };
+
+  const handleDeleteCandidate = async (candidate) => {
+    const confirmed = window.confirm(`Supprimer le candidat ${candidate.nomComplet} ?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/candidats/${candidate.id}`, {
+        method: "DELETE",
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result?.message || "Erreur lors de la suppression du candidat.");
+      }
+
+      removeCandidateFromState(candidate.id);
+      if (typeof refreshCandidatsFromApi === "function") {
+        await refreshCandidatsFromApi();
+      }
+      if (editCandidateId === candidate.id) {
+        cancelEditCandidate();
+      }
+      pushToast("Candidat supprime avec succes.");
+    } catch (error) {
+      const message = error?.message || "Erreur reseau lors de la suppression.";
+      pushToast(message);
+    }
   };
 
   return (
@@ -394,7 +765,7 @@ export default function CandidatsPage() {
           className="cand-create-btn"
           onClick={() => {
             if (!showCreate) {
-              setDraft((p) => ({ ...p, targetType: currentTypeId }));
+              resetCreateForm();
             }
             setShowCreate((v) => !v);
           }}
@@ -404,58 +775,151 @@ export default function CandidatsPage() {
       </div>
 
       {showCreate && (
-        <div className="cand-create-box">
-          <input
-            value={draft.nomComplet}
-            onChange={(e) => setDraft((p) => ({ ...p, nomComplet: e.target.value }))}
-            placeholder="Nom complet"
-          />
-          <input
-            value={draft.cin}
-            onChange={(e) => setDraft((p) => ({ ...p, cin: e.target.value }))}
-            placeholder="CIN"
-          />
-          <input
-            value={draft.telephone}
-            onChange={(e) => setDraft((p) => ({ ...p, telephone: e.target.value }))}
-            placeholder="Telephone"
-          />
-          <input
-            value={draft.email}
-            onChange={(e) => setDraft((p) => ({ ...p, email: e.target.value }))}
-            placeholder="Email"
-          />
-          <select
-            value={draft.targetType}
-            onChange={(e) => setDraft((p) => ({ ...p, targetType: e.target.value }))}
-          >
-            {candidateTypes.map((type) => (
-              <option key={type.id} value={type.id}>{`Ajouter vers: ${type.title}`}</option>
-            ))}
-          </select>
-          <select
-            value={draft.canalEntree}
-            onChange={(e) => setDraft((p) => ({ ...p, canalEntree: e.target.value }))}
-          >
-            <option value="Direct">Canal: Direct (sans survey)</option>
-            <option value="Survey">Canal: Survey</option>
-          </select>
-          {createHasPoste ? (
+        <form className="cand-create-box" onSubmit={handleSubmit}>
+          {submissionMessage && <div className="cand-create-hint error">{submissionMessage}</div>}
+
+          <div className={`cand-create-field ${errors.nom ? "is-invalid" : ""}`}>
+            <label htmlFor="cand-nom">Nom complet</label>
+            <input
+              id="cand-nom"
+              value={nom}
+              onChange={(e) => {
+                setNom(e.target.value);
+                clearFieldError("nom");
+              }}
+              placeholder="Nom complet"
+              autoComplete="name"
+              required
+              aria-invalid={Boolean(errors.nom)}
+            />
+            {errors.nom && <span className="cand-create-error">{errors.nom}</span>}
+          </div>
+
+          <div className={`cand-create-field ${errors.cin ? "is-invalid" : ""}`}>
+            <label htmlFor="cand-cin">CIN</label>
+            <input
+              id="cand-cin"
+              value={cin}
+              onChange={(e) => {
+                setCin(sanitizeDigits(e.target.value, MAX_CIN_LENGTH));
+                clearFieldError("cin");
+              }}
+              placeholder="00000000"
+              inputMode="numeric"
+              pattern="\d{8}"
+              maxLength={MAX_CIN_LENGTH}
+              required
+              aria-invalid={Boolean(errors.cin)}
+            />
+            {errors.cin && <span className="cand-create-error">{errors.cin}</span>}
+          </div>
+
+          <div className={`cand-create-field ${errors.telephone ? "is-invalid" : ""}`}>
+            <label htmlFor="cand-telephone">Telephone</label>
+            <input
+              id="cand-telephone"
+              value={telephone}
+              onChange={(e) => {
+                setTelephone(sanitizeDigits(e.target.value, MAX_PHONE_LENGTH));
+                clearFieldError("telephone");
+              }}
+              placeholder="22000000"
+              autoComplete="tel"
+              inputMode="numeric"
+              pattern="\d{8}"
+              maxLength={MAX_PHONE_LENGTH}
+              required
+              aria-invalid={Boolean(errors.telephone)}
+            />
+            {errors.telephone && <span className="cand-create-error">{errors.telephone}</span>}
+          </div>
+
+          <div className={`cand-create-field ${errors.age ? "is-invalid" : ""}`}>
+            <label htmlFor="cand-age">Age</label>
+            <input
+              id="cand-age"
+              type="text"
+              value={age}
+              onChange={(e) => {
+                setAge(sanitizeDigits(e.target.value, MAX_AGE_LENGTH));
+                clearFieldError("age");
+              }}
+              placeholder="24"
+              inputMode="numeric"
+              pattern="\d+"
+              maxLength={MAX_AGE_LENGTH}
+              required
+              aria-invalid={Boolean(errors.age)}
+            />
+            {errors.age && <span className="cand-create-error">{errors.age}</span>}
+          </div>
+
+          <div className={`cand-create-field ${errors.niveauScolaire ? "is-invalid" : ""}`}>
+            <label htmlFor="cand-niveau">Niveau scolaire</label>
             <select
-              value={draft.posteVise}
-              onChange={(e) => setDraft((p) => ({ ...p, posteVise: e.target.value }))}
+              id="cand-niveau"
+              value={niveauScolaire}
+              onChange={(e) => {
+                setNiveauScolaire(e.target.value);
+                clearFieldError("niveauScolaire");
+              }}
+              required
+              aria-invalid={Boolean(errors.niveauScolaire)}
             >
-              {postes.map((p) => (
-                <option key={p}>{p}</option>
+              <option value="">Selectionner un niveau</option>
+              {niveaux
+                .filter((niveau) => niveau !== "Tous")
+                .map((niveau) => (
+                  <option key={niveau} value={niveau}>
+                    {niveau}
+                  </option>
+                ))}
+            </select>
+            {errors.niveauScolaire && <span className="cand-create-error">{errors.niveauScolaire}</span>}
+          </div>
+
+          <div className={`cand-create-field ${errors.poste ? "is-invalid" : ""}`}>
+            <label htmlFor="cand-poste">Poste</label>
+            <select
+              id="cand-poste"
+              value={poste}
+              onChange={(e) => {
+                setPoste(e.target.value);
+                clearFieldError("poste");
+              }}
+              required
+              aria-invalid={Boolean(errors.poste)}
+            >
+              {postes.map((posteOption) => (
+                <option key={posteOption} value={posteOption}>
+                  {posteOption}
+                </option>
               ))}
             </select>
-          ) : (
-            <div className="cand-create-hint">
-              Etape Survey: uniquement informations personnelles (sans poste).
-            </div>
-          )}
-          <button onClick={createCandidate}>Ajouter</button>
-        </div>
+            {errors.poste && <span className="cand-create-error">{errors.poste}</span>}
+          </div>
+
+          <div className={`cand-create-field cand-create-field-wide ${errors.adresse ? "is-invalid" : ""}`}>
+            <label htmlFor="cand-adresse">Adresse</label>
+            <input
+              id="cand-adresse"
+              value={adresse}
+              onChange={(e) => {
+                setAdresse(e.target.value);
+                clearFieldError("adresse");
+              }}
+              placeholder="Adresse complete"
+              autoComplete="street-address"
+              required
+              aria-invalid={Boolean(errors.adresse)}
+            />
+            {errors.adresse && <span className="cand-create-error">{errors.adresse}</span>}
+          </div>
+
+          <button type="submit" className="cand-create-submit">
+            Ajouter
+          </button>
+        </form>
       )}
 
       <div className="cand-type-strip">
@@ -474,13 +938,16 @@ export default function CandidatsPage() {
 
       <div className="cand-filters">
         <div className="cand-search-wrap">
+          <span className="cand-search-icon" aria-hidden="true">
+            🔍
+          </span>
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Recherche: nom, CIN, telephone..."
+            placeholder="Rechercher par nom, CIN ou téléphone..."
           />
         </div>
-        <div>
+        <div className="cand-filter-field">
           <label>Gouvernorat</label>
           <select value={filtreGouv} onChange={(e) => setFiltreGouv(e.target.value)}>
             {gouvs.map((g) => (
@@ -488,7 +955,7 @@ export default function CandidatsPage() {
             ))}
           </select>
         </div>
-        <div>
+        <div className="cand-filter-field">
           <label>Niveau</label>
           <select value={filtreNiveau} onChange={(e) => setFiltreNiveau(e.target.value)}>
             {niveaux.map((n) => (
@@ -496,7 +963,7 @@ export default function CandidatsPage() {
             ))}
           </select>
         </div>
-        <div>
+        <div className="cand-filter-field">
           <label>Statut admin</label>
           <select value={filtreStatut} onChange={(e) => setFiltreStatut(e.target.value)}>
             {statutChoices.map((status) => (
@@ -513,7 +980,7 @@ export default function CandidatsPage() {
             setFiltreStatut("Tous");
           }}
         >
-          Reinitialiser
+          Réinitialiser
         </button>
       </div>
 
@@ -540,6 +1007,7 @@ export default function CandidatsPage() {
                 const avisClass = avisValue === AVIS_OK ? "ok" : avisValue === AVIS_REFUSE ? "ko" : "wait";
                 const entretien = getEntretienMeta(c.entretienResult);
                 const isLegalOkRemark = norm(c.notes).includes("avis juridique ok");
+                const isEditing = currentTypeId === "test_passed" && editCandidateId === c.id;
                 return (
                   <article key={c.id} className="cand-card">
                     <div className="cand-card-top">
@@ -550,7 +1018,7 @@ export default function CandidatsPage() {
                       </div>
                       {currentTypeId === "test_passed" && (
                         <button className="dossier-open" onClick={() => openDossier(c.id)}>
-                          Ouvrir dossier
+                          Consulter dossier
                         </button>
                       )}
                     </div>
@@ -569,14 +1037,24 @@ export default function CandidatsPage() {
                     <div className="cand-meta">
                       <div>
                         <label>Canal</label>
-                        <strong>{c.canalEntree || (c.typeCandidat === "survey_ready" ? "Survey" : "Direct")}</strong>
+                        <strong>{normalizeCanalEntree(c.canalEntree)}</strong>
                       </div>
-                      {showPosteField && (
-                        <div>
-                          <label>Poste</label>
-                          <strong>{c.posteVise || "-"}</strong>
-                        </div>
-                      )}
+                      <div>
+                        <label>Age</label>
+                        <strong>{c.age || "-"}</strong>
+                      </div>
+                      <div>
+                        <label>Niveau scolaire</label>
+                        <strong>{c.niveauEtudes || "-"}</strong>
+                      </div>
+                      <div>
+                        <label>Poste</label>
+                        <strong>{c.posteVise || "-"}</strong>
+                      </div>
+                      <div>
+                        <label>Adresse</label>
+                        <strong>{c.adresse || "-"}</strong>
+                      </div>
                       <div>
                         <label>Residence</label>
                         <strong>{c.gouvernoratResidence || "-"}</strong>
@@ -584,10 +1062,6 @@ export default function CandidatsPage() {
                       <div>
                         <label>Telephone</label>
                         <strong>{c.telephone || "-"}</strong>
-                      </div>
-                      <div>
-                        <label>Email</label>
-                        <strong>{c.email || "Non renseigne"}</strong>
                       </div>
                       {c.notes && (
                         <div className={`cand-remark ${isLegalOkRemark ? "legal-ok" : ""}`}>
@@ -598,14 +1072,15 @@ export default function CandidatsPage() {
                     </div>
 
                     <div className="cand-workflow-move">
-                      <label>Changer de type</label>
-                      <select value={c.typeCandidat} onChange={(e) => moveToType(c, e.target.value)}>
-                        {candidateTypes.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.title}
-                          </option>
-                        ))}
-                      </select>
+                      {c.typeCandidat === "candidat" && (
+                        <button
+                          type="button"
+                          className="cand-send-btn"
+                          onClick={() => sendToTest(c)}
+                        >
+                          Envoyer au Test / Entretien
+                        </button>
+                      )}
                     </div>
 
                     {currentTypeId === "test_passed" && (
@@ -639,27 +1114,190 @@ export default function CandidatsPage() {
                       </div>
                     )}
 
+                    {isEditing && (
+                      <form className="cand-create-box cand-edit-box" onSubmit={(e) => handleEditSubmit(e, c.id)}>
+                        {editMessage && <div className="cand-create-hint error">{editMessage}</div>}
+
+                        <div className={`cand-create-field ${editErrors.nom ? "is-invalid" : ""}`}>
+                          <label htmlFor={`edit-nom-${c.id}`}>Nom complet</label>
+                          <input
+                            id={`edit-nom-${c.id}`}
+                            value={editForm.nom}
+                            onChange={(e) => {
+                              setEditForm((prev) => ({ ...prev, nom: e.target.value }));
+                              clearEditFieldError("nom");
+                            }}
+                            required
+                            aria-invalid={Boolean(editErrors.nom)}
+                          />
+                          {editErrors.nom && <span className="cand-create-error">{editErrors.nom}</span>}
+                        </div>
+
+                        <div className={`cand-create-field ${editErrors.cin ? "is-invalid" : ""}`}>
+                          <label htmlFor={`edit-cin-${c.id}`}>CIN</label>
+                          <input
+                            id={`edit-cin-${c.id}`}
+                            value={editForm.cin}
+                            onChange={(e) => {
+                              setEditForm((prev) => ({
+                                ...prev,
+                                cin: sanitizeDigits(e.target.value, MAX_CIN_LENGTH),
+                              }));
+                              clearEditFieldError("cin");
+                            }}
+                            inputMode="numeric"
+                            pattern="\d{8}"
+                            maxLength={MAX_CIN_LENGTH}
+                            required
+                            aria-invalid={Boolean(editErrors.cin)}
+                          />
+                          {editErrors.cin && <span className="cand-create-error">{editErrors.cin}</span>}
+                        </div>
+
+                        <div className={`cand-create-field ${editErrors.telephone ? "is-invalid" : ""}`}>
+                          <label htmlFor={`edit-tel-${c.id}`}>Telephone</label>
+                          <input
+                            id={`edit-tel-${c.id}`}
+                            value={editForm.telephone}
+                            onChange={(e) => {
+                              setEditForm((prev) => ({
+                                ...prev,
+                                telephone: sanitizeDigits(e.target.value, MAX_PHONE_LENGTH),
+                              }));
+                              clearEditFieldError("telephone");
+                            }}
+                            inputMode="numeric"
+                            pattern="\d{8}"
+                            maxLength={MAX_PHONE_LENGTH}
+                            required
+                            aria-invalid={Boolean(editErrors.telephone)}
+                          />
+                          {editErrors.telephone && <span className="cand-create-error">{editErrors.telephone}</span>}
+                        </div>
+
+                        <div className={`cand-create-field ${editErrors.age ? "is-invalid" : ""}`}>
+                          <label htmlFor={`edit-age-${c.id}`}>Age</label>
+                          <input
+                            id={`edit-age-${c.id}`}
+                            value={editForm.age}
+                            onChange={(e) => {
+                              setEditForm((prev) => ({
+                                ...prev,
+                                age: sanitizeDigits(e.target.value, MAX_AGE_LENGTH),
+                              }));
+                              clearEditFieldError("age");
+                            }}
+                            inputMode="numeric"
+                            pattern="\d+"
+                            maxLength={MAX_AGE_LENGTH}
+                            required
+                            aria-invalid={Boolean(editErrors.age)}
+                          />
+                          {editErrors.age && <span className="cand-create-error">{editErrors.age}</span>}
+                        </div>
+
+                        <div className={`cand-create-field ${editErrors.niveauScolaire ? "is-invalid" : ""}`}>
+                          <label htmlFor={`edit-niveau-${c.id}`}>Niveau scolaire</label>
+                          <select
+                            id={`edit-niveau-${c.id}`}
+                            value={editForm.niveauScolaire}
+                            onChange={(e) => {
+                              setEditForm((prev) => ({ ...prev, niveauScolaire: e.target.value }));
+                              clearEditFieldError("niveauScolaire");
+                            }}
+                            required
+                            aria-invalid={Boolean(editErrors.niveauScolaire)}
+                          >
+                            <option value="">Selectionner un niveau</option>
+                            {niveaux
+                              .filter((niveau) => niveau !== "Tous")
+                              .map((niveau) => (
+                                <option key={niveau} value={niveau}>
+                                  {niveau}
+                                </option>
+                              ))}
+                          </select>
+                          {editErrors.niveauScolaire && (
+                            <span className="cand-create-error">{editErrors.niveauScolaire}</span>
+                          )}
+                        </div>
+
+                        <div className={`cand-create-field ${editErrors.poste ? "is-invalid" : ""}`}>
+                          <label htmlFor={`edit-poste-${c.id}`}>Poste</label>
+                          <select
+                            id={`edit-poste-${c.id}`}
+                            value={editForm.poste}
+                            onChange={(e) => {
+                              setEditForm((prev) => ({ ...prev, poste: e.target.value }));
+                              clearEditFieldError("poste");
+                            }}
+                            required
+                            aria-invalid={Boolean(editErrors.poste)}
+                          >
+                            {postes.map((posteOption) => (
+                              <option key={posteOption} value={posteOption}>
+                                {posteOption}
+                              </option>
+                            ))}
+                          </select>
+                          {editErrors.poste && <span className="cand-create-error">{editErrors.poste}</span>}
+                        </div>
+
+                        <div className={`cand-create-field cand-create-field-wide ${editErrors.adresse ? "is-invalid" : ""}`}>
+                          <label htmlFor={`edit-adresse-${c.id}`}>Adresse</label>
+                          <input
+                            id={`edit-adresse-${c.id}`}
+                            value={editForm.adresse}
+                            onChange={(e) => {
+                              setEditForm((prev) => ({ ...prev, adresse: e.target.value }));
+                              clearEditFieldError("adresse");
+                            }}
+                            required
+                            aria-invalid={Boolean(editErrors.adresse)}
+                          />
+                          {editErrors.adresse && <span className="cand-create-error">{editErrors.adresse}</span>}
+                        </div>
+
+                        <div className="cand-edit-actions">
+                          <button type="submit" className="cand-create-submit">
+                            Enregistrer
+                          </button>
+                          <button type="button" className="action-link" onClick={cancelEditCandidate}>
+                            Annuler
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
                     <div className="cand-actions">
-                      <a
-                        className={`action-link ${!tel ? "disabled" : ""}`}
-                        href={tel || "#"}
-                        onClick={(e) => !tel && e.preventDefault()}
-                      >
-                        Appeler
-                      </a>
-                      <a
-                        className={`action-link ${!mail ? "disabled" : ""}`}
-                        href={mail || "#"}
-                        onClick={(e) => !mail && e.preventDefault()}
-                      >
-                        Envoyer mail
-                      </a>
+                      {currentTypeId === "test_passed" ? (
+                        <button className="action-link" onClick={() => startEditCandidate(c)}>
+                          Edit
+                        </button>
+                      ) : (
+                        <a
+                          className={`action-link ${!tel ? "disabled" : ""}`}
+                          href={tel || "#"}
+                          onClick={(e) => !tel && e.preventDefault()}
+                        >
+                          Appeler
+                        </a>
+                      )}
+                      {currentTypeId !== "test_passed" && (
+                        <a
+                          className={`action-link ${!mail ? "disabled" : ""}`}
+                          href={mail || "#"}
+                          onClick={(e) => !mail && e.preventDefault()}
+                        >
+                          Envoyer mail
+                        </a>
+                      )}
                       {currentTypeId === "test_passed" && (
                         <button className="dossier-link" onClick={() => openDossier(c.id)}>
-                          Dossier
+                          Consulter dossier
                         </button>
                       )}
-                      <button className="delete-link" onClick={() => deleteCandidat(c.id)}>
+                      <button className="delete-link" onClick={() => handleDeleteCandidate(c)}>
                         Supprimer
                       </button>
                     </div>

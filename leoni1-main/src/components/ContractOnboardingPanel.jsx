@@ -1,14 +1,96 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useRecrutements } from "../context/RecrutementsContext.jsx";
-
-const STATUS_ACCEPTE = "Accepte";
+import {
+  SIGNATURE_SUR_PLACE,
+  TYPE_CONTRAT_OPTIONS,
+  normalizeContractType,
+} from "../data/contractWorkflow.js";
+import "./ContractOnboardingPanel.css";
 
 const requiredDocDefinitions = [
-  { key: "rib_banque", label: "RIB banque", maleOnly: false },
-  { key: "b3", label: "B3 (homme)", maleOnly: true },
-  { key: "copie_cin", label: "Copie carte d'identite", maleOnly: false },
-  { key: "certificat_scolaire", label: "Certificat scolaire", maleOnly: false },
-  { key: "photo_identite", label: "Photo d'identite", maleOnly: false },
+  { key: "photos_identite", label: "Photos d'identite", sourceService: "Recrutement", maleOnly: false },
+  {
+    key: "copies_cin",
+    label: "Copies de la carte d'identite nationale",
+    sourceService: "Recrutement",
+    maleOnly: false,
+  },
+  {
+    key: "declaration_adresse",
+    label: "Declaration d'adresse avec signature legalisee",
+    sourceService: "Recrutement",
+    maleOnly: false,
+  },
+  {
+    key: "extrait_naissance_candidat",
+    label: "Extrait de naissance du candidat",
+    sourceService: "Recrutement",
+    maleOnly: false,
+  },
+  {
+    key: "document_administratif",
+    label: "Document administratif",
+    sourceService: "Recrutement",
+    maleOnly: false,
+  },
+  {
+    key: "rib_20_chiffres",
+    label: "RIB / document du compte courant contenant 20 chiffres avec cachet original",
+    sourceService: "Recrutement",
+    maleOnly: false,
+  },
+  {
+    key: "bulletin_numero_3",
+    label: "Bulletin n 3 / casier judiciaire",
+    sourceService: "Service Contrats",
+    maleOnly: false,
+  },
+  {
+    key: "copies_diplomes",
+    label: "Copies certifiees conformes des diplomes prouvant le niveau scolaire",
+    sourceService: "Recrutement",
+    maleOnly: false,
+  },
+  {
+    key: "attestation_cnss",
+    label: "Attestation d'affiliation a la CNSS pour les personnes ayant deja travaille",
+    sourceService: "Recrutement",
+    maleOnly: false,
+  },
+  {
+    key: "contrat_initiation_vie_professionnelle",
+    label: "Contrat d'initiation a la vie professionnelle",
+    sourceService: "Service Contrats",
+    maleOnly: false,
+  },
+  {
+    key: "contrat_travail_signature_legalisee",
+    label: "Contrat de travail avec signature legalisee",
+    sourceService: "Service Contrats",
+    maleOnly: false,
+  },
+  {
+    key: "extrait_naissance_conjoint",
+    label: "Extrait de naissance du conjoint",
+    sourceService: "Recrutement",
+    maleOnly: false,
+    familyOnly: true,
+  },
+  {
+    key: "contrat_mariage",
+    label: "Copie du contrat de mariage ou extrait de mariage",
+    sourceService: "Recrutement",
+    maleOnly: false,
+    familyOnly: true,
+  },
+  {
+    key: "extrait_naissance_enfants",
+    label: "Extrait de naissance original pour chaque enfant",
+    sourceService: "Recrutement",
+    maleOnly: false,
+    familyOnly: true,
+  },
 ];
 
 function norm(value) {
@@ -18,276 +100,416 @@ function norm(value) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+function toBooleanFlag(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["1", "true", "yes", "oui"].includes(normalized)) return true;
+    if (["0", "false", "no", "non", ""].includes(normalized)) return false;
+  }
+  return false;
+}
+
+function formatDateTime(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("fr-TN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function isMaleCandidate(candidat) {
   const sexe = norm(candidat?.sexe);
   return sexe.includes("homme") || sexe.includes("male") || sexe.includes("garcon");
 }
 
-function getRequiredDocs(candidat) {
-  const isMale = isMaleCandidate(candidat);
-  return requiredDocDefinitions.filter((doc) => !doc.maleOnly || isMale);
+function getMaritalStatusValue(candidat, maritalStatusDrafts = {}) {
+  const localValue = maritalStatusDrafts?.[candidat?.id];
+  if (localValue === "marie" || localValue === "non_marie") {
+    return localValue;
+  }
+
+  const familyStatus = norm(
+    candidat?.situationFamiliale ||
+      candidat?.situation_familiale ||
+      candidat?.etatCivil ||
+      candidat?.etat_civil
+  ).replace(/\s+/g, " ");
+
+  if (!familyStatus) return "non_marie";
+  if (familyStatus.includes("non marie")) return "non_marie";
+  if (familyStatus.includes("marie")) return "marie";
+  return "non_marie";
 }
 
-function isContractDossierComplete(candidat) {
-  const docs = candidat.documentsContrat || {};
-  const requiredDocs = getRequiredDocs(candidat);
-  const hasAllDocs = requiredDocs.every((doc) => Boolean(docs[doc.key]));
-  return hasAllDocs && Boolean(candidat.contratSigne);
+function isMarriedCandidate(candidat, maritalStatusDrafts = {}) {
+  return getMaritalStatusValue(candidat, maritalStatusDrafts) === "marie";
+}
+
+function getRequiredDocs(candidat, maritalStatusDrafts = {}) {
+  const isMale = isMaleCandidate(candidat);
+  const isMarried = isMarriedCandidate(candidat, maritalStatusDrafts);
+  return requiredDocDefinitions.filter((doc) => {
+    if (doc.maleOnly && !isMale) return false;
+    if (doc.familyOnly && !isMarried) return false;
+    return true;
+  });
+}
+
+function getCandidateDocs(candidate, localDrafts) {
+  const draft = localDrafts?.[candidate.id];
+  if (draft && typeof draft === "object") return draft;
+  return candidate.documentsContrat || {};
+}
+
+function computeDossierProgress(candidate, localDrafts, maritalStatusDrafts = {}) {
+  const requiredDocs = getRequiredDocs(candidate, maritalStatusDrafts);
+  const docs = getCandidateDocs(candidate, localDrafts);
+  const doneCount = requiredDocs.filter((doc) => Boolean(docs[doc.key])).length;
+  const total = requiredDocs.length || 1;
+  const percent = Math.round((doneCount / total) * 100);
+  return {
+    requiredDocs,
+    docs,
+    doneCount,
+    total: requiredDocs.length,
+    percent,
+    isComplete: doneCount === requiredDocs.length && requiredDocs.length > 0,
+  };
+}
+
+function computeCandidateWorkflow(candidate, localDrafts, maritalStatusDrafts = {}) {
+  const progress = computeDossierProgress(candidate, localDrafts, maritalStatusDrafts);
+  const contratSigne = toBooleanFlag(candidate?.contratSigne ?? candidate?.contrat_signe);
+  const dossierValide = toBooleanFlag(candidate?.dossierValide ?? candidate?.dossier_valide);
+  const etape = String(candidate?.etape || "").trim().toUpperCase();
+  const statut = String(candidate?.statut || "").trim().toUpperCase();
+  const finalise = etape === "NOUVEAU_RECRUTE" || statut === "CONTRAT_FINALISE";
+
+  return {
+    progress,
+    contratSigne,
+    dossierValide,
+    finalise,
+  };
 }
 
 export default function ContractOnboardingPanel() {
-  const { candidats, updateCandidat } = useRecrutements();
-  const [toast, setToast] = useState("");
+  const navigate = useNavigate();
+  const { candidats, validerDossierContrat, signerContratCandidat, setCandidatTypeContrat } = useRecrutements();
+  const [toast, setToast] = useState({ message: "", type: "info" });
+  const [localDocDrafts, setLocalDocDrafts] = useState({});
+  const [maritalStatusDrafts, setMaritalStatusDrafts] = useState({});
+  const [savingTypeDrafts, setSavingTypeDrafts] = useState({});
+  const [expandedCandidateId, setExpandedCandidateId] = useState(null);
 
   const queue = useMemo(
-    () => candidats.filter((c) => c.typeCandidat === "contact_contract"),
+    () =>
+      candidats.filter((candidate) => {
+        const etape = String(candidate?.etape || "").trim().toUpperCase();
+        return etape === "DOSSIER_CONTRAT" || etape === "CONTRAT_A_SIGNER";
+      }),
     [candidats]
   );
 
-  const pendingCount = queue.filter((c) => !c.contratValide).length;
-
-  const pushToast = (message, timeout = 2200) => {
-    setToast(message);
-    setTimeout(() => setToast(""), timeout);
+  const pushToast = (message, type = "info", timeout = 2800) => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast((current) => (current.message === message ? { message: "", type: "info" } : current));
+    }, timeout);
   };
 
-  const toggleDocument = (candidate, key) => {
-    const docs = candidate.documentsContrat || {};
-    const next = {
-      ...candidate,
-      documentsContrat: { ...docs, [key]: !docs[key] },
-      contratValide: false,
-      statut: STATUS_ACCEPTE,
-    };
-    updateCandidat(next);
-    pushToast(`Document mis a jour pour ${candidate.nomComplet}.`, 1400);
+  const toggleExpanded = (candidateId) => {
+    setExpandedCandidateId((current) => (current === candidateId ? null : candidateId));
   };
 
-  const toggleSignature = (candidate) => {
-    const nextSigned = !candidate.contratSigne;
-    const next = {
-      ...candidate,
-      contratSigne: nextSigned,
-      contratValide: false,
-      statut: STATUS_ACCEPTE,
-    };
-    updateCandidat(next);
-    pushToast(
-      nextSigned
-        ? `Contrat signe pour ${candidate.nomComplet}.`
-        : `Signature retiree pour ${candidate.nomComplet}.`,
-      1600
-    );
+  const toggleDocumentStatus = (candidate, docKey) => {
+    setLocalDocDrafts((prev) => {
+      const currentDocs = getCandidateDocs(candidate, prev);
+      const nextDocs = {
+        ...currentDocs,
+        [docKey]: !currentDocs[docKey],
+      };
+      return {
+        ...prev,
+        [candidate.id]: nextDocs,
+      };
+    });
   };
 
-  const validateDossier = (candidate) => {
-    if (!isContractDossierComplete(candidate)) {
-      pushToast("Dossier incomplet: verifier toutes les pieces et la signature.");
+  const openCandidateDossier = (candidateId) => {
+    navigate(`/candidats/test/${candidateId}/dossier?from=contracts`);
+  };
+
+  const handleValidateDossier = async (candidate) => {
+    const workflow = computeCandidateWorkflow(candidate, localDocDrafts, maritalStatusDrafts);
+    if (workflow.dossierValide) {
+      pushToast(`Le dossier de ${candidate.nomComplet} est deja valide.`, "info");
       return;
     }
-    updateCandidat({
-      ...candidate,
-      contratValide: true,
-      statut: STATUS_ACCEPTE,
+    if (!workflow.progress.isComplete) {
+      pushToast(`Dossier incomplet pour ${candidate.nomComplet}.`, "error", 3200);
+      return;
+    }
+
+    const result = await validerDossierContrat(candidate.id, { dossierComplet: true });
+    if (!result?.ok) {
+      pushToast(result?.message || "Validation dossier impossible.", "error", 3400);
+      return;
+    }
+
+    pushToast(result?.message || "Dossier valide.", "success", 3200);
+  };
+
+  const handleSignContract = async (candidate) => {
+    const workflow = computeCandidateWorkflow(candidate, localDocDrafts, maritalStatusDrafts);
+    if (workflow.contratSigne) {
+      pushToast(`Le contrat de ${candidate.nomComplet} est deja signe.`, "info");
+      return;
+    }
+
+    const normalizedTypeContrat = normalizeContractType(candidate?.type_contrat || candidate?.typeContrat);
+    if (!normalizedTypeContrat) {
+      pushToast("Veuillez sélectionner le type de contrat avant de signer.", "error", 3400);
+      return;
+    }
+
+    const selectedLieu = SIGNATURE_SUR_PLACE;
+
+    console.log("[ContractOnboardingPanel] Signer le contrat", {
+      candidateId: candidate.id,
+      candidateName: candidate.nomComplet || null,
+      endpoint: `POST /api/candidats/${candidate.id}/contrat/signer`,
+      payload: {
+        lieu_signature: selectedLieu,
+        type_contrat: normalizedTypeContrat,
+      },
     });
-    pushToast(`Dossier contrat valide pour ${candidate.nomComplet}.`);
+
+    const result = await signerContratCandidat(candidate.id, { lieuSignature: selectedLieu });
+    if (!result?.ok) {
+      console.error("[ContractOnboardingPanel] Signature contrat echec", result);
+      pushToast(result?.message || "Signature contrat impossible.", "error", 3400);
+      return;
+    }
+
+    pushToast(result?.message || "Contrat signe.", "success", 3200);
+  };
+
+  const handleTypeContratChange = async (candidate, nextType) => {
+    const normalizedType = normalizeContractType(nextType);
+    if (!normalizedType) {
+      pushToast("Veuillez sélectionner un type de contrat valide.", "error", 2600);
+      return;
+    }
+
+    setSavingTypeDrafts((prev) => ({ ...prev, [candidate.id]: true }));
+    try {
+      const result = await setCandidatTypeContrat(candidate.id, normalizedType);
+      if (!result?.ok) {
+        pushToast(result?.message || "Mise a jour du type contrat impossible.", "error", 3200);
+        return;
+      }
+      pushToast(result?.message || `Type contrat mis a jour (${normalizedType}).`, "success", 1800);
+    } finally {
+      setSavingTypeDrafts((prev) => {
+        const next = { ...prev };
+        delete next[candidate.id];
+        return next;
+      });
+    }
   };
 
   return (
-    <section
-      style={{
-        background: "#fff",
-        border: "1px solid var(--border)",
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 18,
-      }}
-    >
-      {toast && (
-        <div
-          style={{
-            marginBottom: 12,
-            border: "1px solid #d8c8f4",
-            background: "#f6f0ff",
-            color: "#5f34a4",
-            borderRadius: 8,
-            padding: "8px 10px",
-            fontSize: 12,
-            fontWeight: 700,
-          }}
-        >
-          {toast}
-        </div>
-      )}
+    <section className="dossier-board">
+      {toast.message && <div className={`dossier-toast ${toast.type}`}>{toast.message}</div>}
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          gap: 12,
-          marginBottom: 12,
-          flexWrap: "wrap",
-        }}
-      >
+      <header className="dossier-board-head">
         <div>
-          <h3 style={{ fontSize: 17, fontWeight: 800, color: "#5f34a4" }}>
-            Candidats envoyes par recrutement
-          </h3>
-          <p style={{ marginTop: 3, fontSize: 12, color: "#6f57a8" }}>
-            Entretien valide (OK): signature contrat + verification dossier.
-          </p>
+          <h3>Dossier Contrat - Service Contrats</h3>
+          <p>Vue compacte: utilisez "Afficher les documents" pour ouvrir le detail d'un candidat.</p>
         </div>
-        <div
-          style={{
-            border: "1px solid #d8c8f4",
-            background: "#faf7ff",
-            borderRadius: 9,
-            padding: "6px 10px",
-            fontSize: 12,
-            color: "#5f34a4",
-            fontWeight: 700,
-          }}
-        >
-          {pendingCount}/{queue.length} en cours
+        <div className="dossier-board-kpi">
+          <strong>{queue.length}</strong>
+          <span>Candidats en cours</span>
         </div>
-      </div>
+      </header>
 
       {queue.length === 0 ? (
-        <div
-          style={{
-            border: "1px dashed #d8c8f4",
-            borderRadius: 10,
-            background: "#faf7ff",
-            color: "#6f57a8",
-            fontSize: 13,
-            padding: 14,
-          }}
-        >
-          Aucun candidat en attente de traitement contrat.
-        </div>
+        <div className="dossier-empty-state">Aucun candidat a l'etape DOSSIER_CONTRAT.</div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="dossier-list">
           {queue.map((candidate) => {
-            const docs = candidate.documentsContrat || {};
-            const requiredDocs = getRequiredDocs(candidate);
-            const docsDone = requiredDocs.filter((doc) => docs[doc.key]).length;
-            const dossierComplete = isContractDossierComplete(candidate);
+            const workflow = computeCandidateWorkflow(candidate, localDocDrafts, maritalStatusDrafts);
+            const progress = workflow.progress;
+            const typeContrat = normalizeContractType(candidate.type_contrat || candidate.typeContrat) || "Non renseigne";
+            const contratLabel = workflow.contratSigne ? "Signe" : "Non signe";
+            const dossierLabel = workflow.dossierValide
+              ? "Valide"
+              : progress.isComplete
+                ? "Complet a valider"
+                : "Incomplet";
+            const dossierBadgeState = workflow.dossierValide ? "ok" : progress.isComplete ? "info" : "warn";
+            const maritalStatusValue = getMaritalStatusValue(candidate, maritalStatusDrafts);
+            const isSavingType = Boolean(savingTypeDrafts[candidate.id]);
+            const canSignContract = Boolean(normalizeContractType(candidate?.type_contrat || candidate?.typeContrat));
+            const isExpanded = expandedCandidateId === candidate.id;
+
             return (
-              <article
-                key={candidate.id}
-                style={{
-                  border: "1px solid #d8c8f4",
-                  borderRadius: 10,
-                  background: "#faf7ff",
-                  padding: 12,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                    gap: 10,
-                    flexWrap: "wrap",
-                    marginBottom: 10,
-                  }}
-                >
+              <article key={candidate.id} className={`dossier-card-compact ${isExpanded ? "expanded" : ""}`}>
+                <div className="dossier-summary-top">
                   <div>
-                    <div style={{ fontSize: 14, fontWeight: 800, color: "#4f288c" }}>
-                      {candidate.nomComplet}
-                    </div>
-                    <div style={{ fontSize: 12, color: "#6f57a8", marginTop: 2 }}>
-                      CIN: {candidate.cin || "-"} | Tel: {candidate.telephone || "-"}
-                    </div>
+                    <h4>{candidate.nomComplet || "Candidat sans nom"}</h4>
+                    <p>CIN: {candidate.cin || "-"} | Type contrat: {typeContrat}</p>
                   </div>
-                  <div
-                    style={{
-                      borderRadius: 999,
-                      padding: "3px 10px",
-                      fontSize: 11,
-                      fontWeight: 800,
-                      background: candidate.contratValide ? "#def4e9" : "#f4ecff",
-                      color: candidate.contratValide ? "#1f885c" : "#5f34a4",
-                      border: `1px solid ${candidate.contratValide ? "#bce3cd" : "#d8c8f4"}`,
-                    }}
-                  >
-                    {candidate.contratValide ? "Contrat valide" : "Traitement contrat"}
+                  <div className="dossier-head-badges">
+                    <span className="badge type">{typeContrat}</span>
+                    <span className={`badge status ${workflow.contratSigne ? "ok" : "warn"}`}>Contrat {contratLabel}</span>
+                    <span className={`badge status ${dossierBadgeState}`}>Dossier {dossierLabel}</span>
+                    {workflow.finalise && <span className="badge status ok">Nouveau recrute</span>}
                   </div>
                 </div>
 
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-                    gap: 8,
-                    marginBottom: 10,
-                  }}
-                >
-                  {requiredDocs.map((doc) => {
-                    const done = Boolean(docs[doc.key]);
-                    return (
+                <div className="summary-progress-row">
+                  <div className="summary-progress-label">
+                    <span>Progression documents</span>
+                    <strong>{progress.doneCount}/{progress.total}</strong>
+                  </div>
+                  <div className="dossier-progress-track compact">
+                    <div
+                      className={`dossier-progress-fill ${progress.isComplete ? "ok" : "warn"}`}
+                      style={{ width: `${progress.percent}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="summary-main-actions">
+                  <button className="btn-secondary" onClick={() => openCandidateDossier(candidate.id)} type="button">
+                    Consulter dossier
+                  </button>
+                  <button className="btn-toggle-docs" onClick={() => toggleExpanded(candidate.id)} type="button">
+                    {isExpanded ? "Masquer les documents" : "Afficher les documents"}
+                  </button>
+                </div>
+
+                {isExpanded && (
+                  <div className="dossier-expand-panel">
+                    <div className="expand-status-line">
+                      <span>
+                        Contrat: <strong>{contratLabel}</strong>
+                      </span>
+                      <span>
+                        Type contrat: <strong>{typeContrat}</strong>
+                      </span>
+                      <span>
+                        Dossier: <strong>{dossierLabel}</strong>
+                      </span>
+                      <span>
+                        Signature: <strong>{formatDateTime(candidate?.dateSignature || candidate?.date_signature)}</strong>
+                      </span>
+                      <label>
+                        Situation familiale:
+                        <select
+                          className="sign-lieu-select"
+                          value={maritalStatusValue}
+                          onChange={(event) =>
+                            setMaritalStatusDrafts((prev) => ({
+                              ...prev,
+                              [candidate.id]: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="non_marie">Situation familiale: Non marie</option>
+                          <option value="marie">Situation familiale: Marie</option>
+                        </select>
+                      </label>
+                    </div>
+
+                    <div className="dossier-doc-table-wrap">
+                      <table className="dossier-doc-table">
+                        <thead>
+                          <tr>
+                            <th>Document</th>
+                            <th>Statut</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {progress.requiredDocs.map((doc) => {
+                            const received = Boolean(progress.docs[doc.key]);
+                            return (
+                              <tr key={`${candidate.id}-${doc.key}`}>
+                                <td>{doc.label}</td>
+                                <td>
+                                  <span className={`doc-status ${received ? "ok" : "missing"}`}>
+                                    {received ? "Recu" : "Manquant"}
+                                  </span>
+                                </td>
+                                <td>
+                                  <button
+                                    className={`doc-toggle-btn ${received ? "missing" : "ok"}`}
+                                    onClick={() => toggleDocumentStatus(candidate, doc.key)}
+                                    type="button"
+                                  >
+                                    {received ? "Marquer manquant" : "Marquer recu"}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="dossier-expand-actions">
+                      <div className="sign-action-wrap">
+                        <select
+                          className="sign-lieu-select"
+                          value={normalizeContractType(candidate.type_contrat || candidate.typeContrat)}
+                          onChange={(event) => void handleTypeContratChange(candidate, event.target.value)}
+                          disabled={workflow.contratSigne || isSavingType}
+                        >
+                          <option value="">Type contrat</option>
+                          {TYPE_CONTRAT_OPTIONS.map((option) => (
+                            <option key={`${candidate.id}-${option}`} value={option}>
+                              Type: {option}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          className="btn-sign"
+                          onClick={() => handleSignContract(candidate)}
+                          disabled={workflow.contratSigne || !canSignContract || isSavingType}
+                          type="button"
+                          title={!canSignContract ? "Veuillez sélectionner le type de contrat avant de signer." : ""}
+                        >
+                          {workflow.contratSigne ? "Contrat signe" : "Signer le contrat"}
+                        </button>
+                      </div>
+
+                      {!canSignContract && !workflow.contratSigne && (
+                        <div className="contract-type-required">
+                          Veuillez sélectionner le type de contrat avant de signer.
+                        </div>
+                      )}
+
                       <button
-                        key={doc.key}
-                        onClick={() => toggleDocument(candidate, doc.key)}
-                        style={{
-                          border: `1px solid ${done ? "#bce3cd" : "#d8c8f4"}`,
-                          background: done ? "#ecfaf2" : "#f4ecff",
-                          color: done ? "#1f885c" : "#5f34a4",
-                          borderRadius: 8,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          padding: "7px 8px",
-                          textAlign: "left",
-                          cursor: "pointer",
-                        }}
+                        className="btn-primary"
+                        onClick={() => handleValidateDossier(candidate)}
+                        disabled={workflow.dossierValide || !progress.isComplete}
+                        type="button"
                       >
-                        {doc.label} - {done ? "OK" : "Manquant"}
+                        {workflow.dossierValide ? "Dossier valide" : "Valider dossier"}
                       </button>
-                    );
-                  })}
-                </div>
-
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <button
-                    onClick={() => toggleSignature(candidate)}
-                    style={{
-                      border: `1px solid ${candidate.contratSigne ? "#15803d" : "#ea580c"}`,
-                      background: candidate.contratSigne ? "#16a34a" : "#f97316",
-                      color: "#fff",
-                      borderRadius: 8,
-                      fontSize: 12,
-                      fontWeight: 800,
-                      padding: "8px 12px",
-                      minWidth: 170,
-                      cursor: "pointer",
-                      boxShadow: candidate.contratSigne
-                        ? "0 2px 8px rgba(22,163,74,0.25)"
-                        : "0 2px 8px rgba(249,115,22,0.25)",
-                    }}
-                  >
-                    {candidate.contratSigne ? "Contrat signe" : "Signer le contrat"}
-                  </button>
-                  <button
-                    onClick={() => validateDossier(candidate)}
-                    style={{
-                      border: "1px solid #6d3eb7",
-                      background: "#6d3eb7",
-                      color: "#fff",
-                      borderRadius: 8,
-                      fontSize: 12,
-                      fontWeight: 800,
-                      padding: "7px 10px",
-                      cursor: "pointer",
-                      opacity: dossierComplete ? 1 : 0.65,
-                    }}
-                  >
-                    Valider dossier contrat
-                  </button>
-                  <span style={{ fontSize: 12, color: "#6f57a8", fontWeight: 700 }}>
-                    Pieces: {docsDone}/{requiredDocs.length}
-                  </span>
-                </div>
+                    </div>
+                  </div>
+                )}
               </article>
             );
           })}

@@ -7,7 +7,6 @@ const dormPalette = {
   textStrong: "#111827",
   textDark: "#1f2937",
   accent: "#2563eb",
-  muted: "#6b7280",
   border: "#e5e7eb",
   bg: "#f8fafc",
   surface: "#ffffff",
@@ -23,7 +22,6 @@ function getOccupancyColor(pct) {
 
 export default function DormsPage() {
   const navigate = useNavigate();
-  const [search, setSearch] = useState("");
   const [dorms, setDorms] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -89,14 +87,6 @@ export default function DormsPage() {
     };
   }, []);
 
-  const filteredDorms = dorms.filter(
-    (d) =>
-      String(d.nom || "").toLowerCase().includes(search.toLowerCase()) ||
-      String(d.ville || "").toLowerCase().includes(search.toLowerCase()) ||
-      String(d.adresse || "").toLowerCase().includes(search.toLowerCase()) ||
-      String(d.telephone || "").toLowerCase().includes(search.toLowerCase())
-  );
-
   const stats = useMemo(() => {
     const totalPlaces = dorms.reduce((sum, d) => sum + d.capacite, 0);
     const occupiedPlaces = dorms.reduce((sum, d) => sum + d.occupes, 0);
@@ -142,21 +132,8 @@ export default function DormsPage() {
         </div>
       </div>
 
-      <div className="dorms-search-wrap">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={dormPalette.muted} strokeWidth="2">
-          <circle cx="11" cy="11" r="8" />
-          <line x1="21" y1="21" x2="16.65" y2="16.65" />
-        </svg>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Rechercher un foyer..."
-          className="dorms-search-input"
-        />
-      </div>
-
       <div className="dorms-grid">
-        {filteredDorms.map((dorm) => {
+        {dorms.map((dorm) => {
           const placesDisponibles = Math.max(dorm.capacite - dorm.occupes, 0);
           const taux = dorm.capacite > 0 ? (dorm.occupes / dorm.capacite) * 100 : 0;
           const tauxLabel = `${taux.toFixed(1)}%`;
@@ -232,7 +209,7 @@ export default function DormsPage() {
         })}
       </div>
 
-      {filteredDorms.length === 0 && (
+      {dorms.length === 0 && (
         <div className="dorms-empty-state">
           Aucun foyer trouve.
         </div>

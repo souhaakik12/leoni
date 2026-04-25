@@ -1,0 +1,2 @@
+ALTER TABLE dbo.Resident
+ALTER COLUMN chambre NVARCHAR(50) NULL;

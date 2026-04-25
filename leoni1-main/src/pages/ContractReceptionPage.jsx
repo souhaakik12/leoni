@@ -8,7 +8,7 @@ export default function ContractReceptionPage() {
           Service Contrats - Reception Candidats
         </h2>
         <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 3 }}>
-          Candidats valides apres entretien: signature contrat et verification dossier.
+          Ici, la signature contrat et la validation dossier sont gerees separement. Le candidat est finalise uniquement quand les deux sont valides.
         </p>
       </div>
 

@@ -153,6 +153,123 @@
   cursor: pointer;
 }
 
+.dossier-save.secondary {
+  margin-left: 8px;
+  border-color: #7b8794;
+  background: #f5f7fa;
+  color: #3f4e5d;
+}
+
+.dossier-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.interview-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.interview-summary {
+  margin-top: 12px;
+  border: 1px solid #d8e6f1;
+  border-radius: 10px;
+  background: #f9fcff;
+  padding: 10px;
+}
+
+.interview-summary-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.interview-summary p {
+  font-size: 12px;
+  color: #4b6a80;
+  margin: 2px 0;
+}
+
+.interview-result-badge {
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 10px;
+  font-weight: 800;
+  border: 1px solid transparent;
+}
+
+.interview-result-badge.ok {
+  background: #def4e9;
+  color: #1f885c;
+  border-color: #bce3cd;
+}
+
+.interview-result-badge.nok {
+  background: #fdeeee;
+  color: #b83636;
+  border-color: #f3c3c3;
+}
+
+.interview-result-badge.pending {
+  background: #edf7fe;
+  color: #1f6e9f;
+  border-color: #b9d8ec;
+}
+
+.interview-result-badge.termine {
+  background: #f3f4f6;
+  color: #4b5563;
+  border-color: #d1d5db;
+}
+
+.interview-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.interview-history-item {
+  border: 1px solid #d8e6f1;
+  border-radius: 8px;
+  background: #f9fcff;
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.interview-history-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.interview-history-main strong {
+  font-size: 12px;
+  color: #1f4f73;
+}
+
+.interview-history-main span {
+  font-size: 11px;
+  color: #63839a;
+}
+
+.interview-history-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.interview-history-meta span {
+  font-size: 11px;
+  color: #63839a;
+}
+
 .dossier-doc-section {
   display: flex;
   flex-direction: column;
@@ -256,6 +373,11 @@
   cursor: pointer;
 }
 
+.doc-actions button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .dossier-not-found {
   border: 1px solid #d8e6f1;
   border-radius: 12px;
@@ -300,5 +422,15 @@
   .dossier-mini-grid,
   .dossier-doc-grid {
     grid-template-columns: 1fr;
+  }
+
+  .interview-history-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .interview-history-meta {
+    width: 100%;
+    justify-content: space-between;
   }
 }
