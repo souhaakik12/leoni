@@ -1,97 +1,16 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useRecrutements } from "../context/RecrutementsContext.jsx";
 import {
   SIGNATURE_SUR_PLACE,
   TYPE_CONTRAT_OPTIONS,
   normalizeContractType,
 } from "../data/contractWorkflow.js";
+import { buildRoleHeaders } from "../utils/roles.js";
 import "./ContractOnboardingPanel.css";
 
-const requiredDocDefinitions = [
-  { key: "photos_identite", label: "Photos d'identite", sourceService: "Recrutement", maleOnly: false },
-  {
-    key: "copies_cin",
-    label: "Copies de la carte d'identite nationale",
-    sourceService: "Recrutement",
-    maleOnly: false,
-  },
-  {
-    key: "declaration_adresse",
-    label: "Declaration d'adresse avec signature legalisee",
-    sourceService: "Recrutement",
-    maleOnly: false,
-  },
-  {
-    key: "extrait_naissance_candidat",
-    label: "Extrait de naissance du candidat",
-    sourceService: "Recrutement",
-    maleOnly: false,
-  },
-  {
-    key: "document_administratif",
-    label: "Document administratif",
-    sourceService: "Recrutement",
-    maleOnly: false,
-  },
-  {
-    key: "rib_20_chiffres",
-    label: "RIB / document du compte courant contenant 20 chiffres avec cachet original",
-    sourceService: "Recrutement",
-    maleOnly: false,
-  },
-  {
-    key: "bulletin_numero_3",
-    label: "Bulletin n 3 / casier judiciaire",
-    sourceService: "Service Contrats",
-    maleOnly: false,
-  },
-  {
-    key: "copies_diplomes",
-    label: "Copies certifiees conformes des diplomes prouvant le niveau scolaire",
-    sourceService: "Recrutement",
-    maleOnly: false,
-  },
-  {
-    key: "attestation_cnss",
-    label: "Attestation d'affiliation a la CNSS pour les personnes ayant deja travaille",
-    sourceService: "Recrutement",
-    maleOnly: false,
-  },
-  {
-    key: "contrat_initiation_vie_professionnelle",
-    label: "Contrat d'initiation a la vie professionnelle",
-    sourceService: "Service Contrats",
-    maleOnly: false,
-  },
-  {
-    key: "contrat_travail_signature_legalisee",
-    label: "Contrat de travail avec signature legalisee",
-    sourceService: "Service Contrats",
-    maleOnly: false,
-  },
-  {
-    key: "extrait_naissance_conjoint",
-    label: "Extrait de naissance du conjoint",
-    sourceService: "Recrutement",
-    maleOnly: false,
-    familyOnly: true,
-  },
-  {
-    key: "contrat_mariage",
-    label: "Copie du contrat de mariage ou extrait de mariage",
-    sourceService: "Recrutement",
-    maleOnly: false,
-    familyOnly: true,
-  },
-  {
-    key: "extrait_naissance_enfants",
-    label: "Extrait de naissance original pour chaque enfant",
-    sourceService: "Recrutement",
-    maleOnly: false,
-    familyOnly: true,
-  },
-];
+const DOCUMENTS_CONTRAT_API_BASE = "http://localhost:3000";
 
 function norm(value) {
   return (value || "")
@@ -124,11 +43,6 @@ function formatDateTime(value) {
   });
 }
 
-function isMaleCandidate(candidat) {
-  const sexe = norm(candidat?.sexe);
-  return sexe.includes("homme") || sexe.includes("male") || sexe.includes("garcon");
-}
-
 function getMaritalStatusValue(candidat, maritalStatusDrafts = {}) {
   const localValue = maritalStatusDrafts?.[candidat?.id];
   if (localValue === "marie" || localValue === "non_marie") {
@@ -148,44 +62,27 @@ function getMaritalStatusValue(candidat, maritalStatusDrafts = {}) {
   return "non_marie";
 }
 
-function isMarriedCandidate(candidat, maritalStatusDrafts = {}) {
-  return getMaritalStatusValue(candidat, maritalStatusDrafts) === "marie";
+function getCandidateDocuments(candidate, documentsByCandidateId = {}) {
+  const documents = documentsByCandidateId?.[candidate.id];
+  return Array.isArray(documents) ? documents : [];
 }
 
-function getRequiredDocs(candidat, maritalStatusDrafts = {}) {
-  const isMale = isMaleCandidate(candidat);
-  const isMarried = isMarriedCandidate(candidat, maritalStatusDrafts);
-  return requiredDocDefinitions.filter((doc) => {
-    if (doc.maleOnly && !isMale) return false;
-    if (doc.familyOnly && !isMarried) return false;
-    return true;
-  });
-}
-
-function getCandidateDocs(candidate, localDrafts) {
-  const draft = localDrafts?.[candidate.id];
-  if (draft && typeof draft === "object") return draft;
-  return candidate.documentsContrat || {};
-}
-
-function computeDossierProgress(candidate, localDrafts, maritalStatusDrafts = {}) {
-  const requiredDocs = getRequiredDocs(candidate, maritalStatusDrafts);
-  const docs = getCandidateDocs(candidate, localDrafts);
-  const doneCount = requiredDocs.filter((doc) => Boolean(docs[doc.key])).length;
-  const total = requiredDocs.length || 1;
-  const percent = Math.round((doneCount / total) * 100);
+function computeDossierProgress(candidate, documentsByCandidateId = {}) {
+  const requiredDocs = getCandidateDocuments(candidate, documentsByCandidateId);
+  const doneCount = requiredDocs.filter((doc) => toBooleanFlag(doc?.est_recu)).length;
+  const total = requiredDocs.length;
+  const percent = total > 0 ? Math.round((doneCount / total) * 100) : 0;
   return {
     requiredDocs,
-    docs,
     doneCount,
-    total: requiredDocs.length,
+    total,
     percent,
-    isComplete: doneCount === requiredDocs.length && requiredDocs.length > 0,
+    isComplete: total > 0 && doneCount === total,
   };
 }
 
-function computeCandidateWorkflow(candidate, localDrafts, maritalStatusDrafts = {}) {
-  const progress = computeDossierProgress(candidate, localDrafts, maritalStatusDrafts);
+function computeCandidateWorkflow(candidate, documentsByCandidateId = {}) {
+  const progress = computeDossierProgress(candidate, documentsByCandidateId);
   const contratSigne = toBooleanFlag(candidate?.contratSigne ?? candidate?.contrat_signe);
   const dossierValide = toBooleanFlag(candidate?.dossierValide ?? candidate?.dossier_valide);
   const etape = String(candidate?.etape || "").trim().toUpperCase();
@@ -202,10 +99,14 @@ function computeCandidateWorkflow(candidate, localDrafts, maritalStatusDrafts = 
 
 export default function ContractOnboardingPanel() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { candidats, validerDossierContrat, signerContratCandidat, setCandidatTypeContrat } = useRecrutements();
   const [toast, setToast] = useState({ message: "", type: "info" });
-  const [localDocDrafts, setLocalDocDrafts] = useState({});
   const [maritalStatusDrafts, setMaritalStatusDrafts] = useState({});
+  const [documentsByCandidateId, setDocumentsByCandidateId] = useState({});
+  const [documentsAttemptedByCandidateId, setDocumentsAttemptedByCandidateId] = useState({});
+  const [documentsLoadingByCandidateId, setDocumentsLoadingByCandidateId] = useState({});
+  const [documentActionDrafts, setDocumentActionDrafts] = useState({});
   const [savingTypeDrafts, setSavingTypeDrafts] = useState({});
   const [expandedCandidateId, setExpandedCandidateId] = useState(null);
 
@@ -225,22 +126,112 @@ export default function ContractOnboardingPanel() {
     }, timeout);
   };
 
-  const toggleExpanded = (candidateId) => {
-    setExpandedCandidateId((current) => (current === candidateId ? null : candidateId));
+  const loadCandidateDocuments = async (candidateId, { silent = false } = {}) => {
+    if (!user) {
+      if (!silent) {
+        pushToast("Authentification requise pour charger les documents contrat.", "error", 3200);
+      }
+      return { ok: false, message: "Authentification requise." };
+    }
+
+    setDocumentsAttemptedByCandidateId((prev) => ({ ...prev, [candidateId]: true }));
+    setDocumentsLoadingByCandidateId((prev) => ({ ...prev, [candidateId]: true }));
+    try {
+      const response = await fetch(
+        `${DOCUMENTS_CONTRAT_API_BASE}/api/candidats/${candidateId}/documents-contrat`,
+        {
+          headers: buildRoleHeaders(user, {
+            "Content-Type": "application/json",
+          }),
+        }
+      );
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.message || "Chargement des documents contrat impossible.");
+      }
+
+      const documents = Array.isArray(payload?.documents) ? payload.documents : [];
+      setDocumentsByCandidateId((prev) => ({
+        ...prev,
+        [candidateId]: documents,
+      }));
+
+      return { ok: true, documents };
+    } catch (error) {
+      if (!silent) {
+        pushToast(error?.message || "Chargement des documents contrat impossible.", "error", 3400);
+      }
+      return { ok: false, message: error?.message || "Chargement des documents contrat impossible." };
+    } finally {
+      setDocumentsLoadingByCandidateId((prev) => {
+        const next = { ...prev };
+        delete next[candidateId];
+        return next;
+      });
+    }
   };
 
-  const toggleDocumentStatus = (candidate, docKey) => {
-    setLocalDocDrafts((prev) => {
-      const currentDocs = getCandidateDocs(candidate, prev);
-      const nextDocs = {
-        ...currentDocs,
-        [docKey]: !currentDocs[docKey],
-      };
-      return {
-        ...prev,
-        [candidate.id]: nextDocs,
-      };
+  useEffect(() => {
+    if (!user || queue.length === 0) return;
+
+    queue.forEach((candidate) => {
+      if (
+        documentsAttemptedByCandidateId[candidate.id] ||
+        documentsByCandidateId[candidate.id] ||
+        documentsLoadingByCandidateId[candidate.id]
+      ) {
+        return;
+      }
+      void loadCandidateDocuments(candidate.id, { silent: true });
     });
+  }, [queue, user, documentsAttemptedByCandidateId, documentsByCandidateId, documentsLoadingByCandidateId]);
+
+  const toggleExpanded = (candidateId) => {
+    const shouldExpand = expandedCandidateId !== candidateId;
+    setExpandedCandidateId(shouldExpand ? candidateId : null);
+
+    if (
+      shouldExpand &&
+      !documentsByCandidateId[candidateId] &&
+      !documentsLoadingByCandidateId[candidateId]
+    ) {
+      void loadCandidateDocuments(candidateId);
+    }
+  };
+
+  const toggleDocumentStatus = async (candidate, documentId, received) => {
+    const actionKey = `${candidate.id}:${documentId}`;
+    setDocumentActionDrafts((prev) => ({ ...prev, [actionKey]: true }));
+
+    try {
+      const endpoint = received ? "manquant" : "recu";
+      const response = await fetch(
+        `${DOCUMENTS_CONTRAT_API_BASE}/api/candidats/${candidate.id}/documents-contrat/${documentId}/${endpoint}`,
+        {
+          method: "POST",
+          headers: buildRoleHeaders(user, {
+            "Content-Type": "application/json",
+          }),
+        }
+      );
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.message || "Mise a jour du document impossible.");
+      }
+
+      await loadCandidateDocuments(candidate.id, { silent: true });
+      pushToast(payload?.message || "Document mis a jour.", "success", 2200);
+    } catch (error) {
+      pushToast(error?.message || "Mise a jour du document impossible.", "error", 3400);
+    } finally {
+      setDocumentActionDrafts((prev) => {
+        const next = { ...prev };
+        delete next[actionKey];
+        return next;
+      });
+    }
   };
 
   const openCandidateDossier = (candidateId) => {
@@ -248,7 +239,7 @@ export default function ContractOnboardingPanel() {
   };
 
   const handleValidateDossier = async (candidate) => {
-    const workflow = computeCandidateWorkflow(candidate, localDocDrafts, maritalStatusDrafts);
+    const workflow = computeCandidateWorkflow(candidate, documentsByCandidateId);
     if (workflow.dossierValide) {
       pushToast(`Le dossier de ${candidate.nomComplet} est deja valide.`, "info");
       return;
@@ -268,7 +259,7 @@ export default function ContractOnboardingPanel() {
   };
 
   const handleSignContract = async (candidate) => {
-    const workflow = computeCandidateWorkflow(candidate, localDocDrafts, maritalStatusDrafts);
+    const workflow = computeCandidateWorkflow(candidate, documentsByCandidateId);
     if (workflow.contratSigne) {
       pushToast(`Le contrat de ${candidate.nomComplet} est deja signe.`, "info");
       return;
@@ -346,7 +337,7 @@ export default function ContractOnboardingPanel() {
       ) : (
         <div className="dossier-list">
           {queue.map((candidate) => {
-            const workflow = computeCandidateWorkflow(candidate, localDocDrafts, maritalStatusDrafts);
+            const workflow = computeCandidateWorkflow(candidate, documentsByCandidateId);
             const progress = workflow.progress;
             const typeContrat = normalizeContractType(candidate.type_contrat || candidate.typeContrat) || "Non renseigne";
             const contratLabel = workflow.contratSigne ? "Signe" : "Non signe";
@@ -357,6 +348,7 @@ export default function ContractOnboardingPanel() {
                 : "Incomplet";
             const dossierBadgeState = workflow.dossierValide ? "ok" : progress.isComplete ? "info" : "warn";
             const maritalStatusValue = getMaritalStatusValue(candidate, maritalStatusDrafts);
+            const isLoadingDocuments = Boolean(documentsLoadingByCandidateId[candidate.id]);
             const isSavingType = Boolean(savingTypeDrafts[candidate.id]);
             const canSignContract = Boolean(normalizeContractType(candidate?.type_contrat || candidate?.typeContrat));
             const isExpanded = expandedCandidateId === candidate.id;
@@ -441,28 +433,44 @@ export default function ContractOnboardingPanel() {
                           </tr>
                         </thead>
                         <tbody>
-                          {progress.requiredDocs.map((doc) => {
-                            const received = Boolean(progress.docs[doc.key]);
-                            return (
-                              <tr key={`${candidate.id}-${doc.key}`}>
-                                <td>{doc.label}</td>
-                                <td>
-                                  <span className={`doc-status ${received ? "ok" : "missing"}`}>
-                                    {received ? "Recu" : "Manquant"}
-                                  </span>
-                                </td>
-                                <td>
-                                  <button
-                                    className={`doc-toggle-btn ${received ? "missing" : "ok"}`}
-                                    onClick={() => toggleDocumentStatus(candidate, doc.key)}
-                                    type="button"
-                                  >
-                                    {received ? "Marquer manquant" : "Marquer recu"}
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
+                          {isLoadingDocuments ? (
+                            <tr>
+                              <td colSpan="3">Chargement des documents...</td>
+                            </tr>
+                          ) : progress.requiredDocs.length > 0 ? (
+                            progress.requiredDocs.map((doc) => {
+                              const received = toBooleanFlag(doc.est_recu);
+                              const actionKey = `${candidate.id}:${doc.type_document_id}`;
+                              const isSavingDocument = Boolean(documentActionDrafts[actionKey]);
+
+                              return (
+                                <tr key={`${candidate.id}-${doc.type_document_id}`}>
+                                  <td>{doc.document}</td>
+                                  <td>
+                                    <span className={`doc-status ${received ? "ok" : "missing"}`}>
+                                      {received ? "Recu" : "Manquant"}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <button
+                                      className={`doc-toggle-btn ${received ? "missing" : "ok"}`}
+                                      onClick={() =>
+                                        void toggleDocumentStatus(candidate, doc.type_document_id, received)
+                                      }
+                                      disabled={isSavingDocument}
+                                      type="button"
+                                    >
+                                      {received ? "Marquer manquant" : "Marquer recu"}
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr>
+                              <td colSpan="3">Aucun document contrat disponible.</td>
+                            </tr>
+                          )}
                         </tbody>
                       </table>
                     </div>
