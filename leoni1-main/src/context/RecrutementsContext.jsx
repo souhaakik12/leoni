@@ -214,6 +214,15 @@ function toBooleanFlag(value) {
 function normalizeCandidateContractFields(candidate) {
   const next = { ...candidate };
 
+  next.nomComplet = next.nomComplet || next.nom || "";
+  next.cin = next.cin || "";
+  next.telephone = next.telephone || "";
+  next.age = next.age ?? "";
+  next.genre = String(next.genre || next.sexe || "").trim();
+  next.niveauEtudes = next.niveauEtudes || next.niveau_etudes || next.niveau_scolaire || "";
+  next.posteVise = next.posteVise || next.poste || "";
+  next.adresse = next.adresse || "";
+
   const contratSigne = toBooleanFlag(next.contratSigne ?? next.contrat_signe);
   const dossierValide = toBooleanFlag(next.dossierValide ?? next.dossier_valide);
   next.contratSigne = contratSigne;

@@ -142,6 +142,17 @@ function formatInterviewDate(value) {
   return date.toLocaleString("fr-FR");
 }
 
+function displayCandidateValue(...values) {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    const normalized = String(value).trim();
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return "-";
+}
+
 export default function CandidatDossierPage() {
   const { candidatId } = useParams();
   const { search } = useLocation();
@@ -546,12 +557,14 @@ export default function CandidatDossierPage() {
         <article className="dossier-card">
           <h3>Informations Personnelles</h3>
           <div className="dossier-mini-grid">
-            <div><label>Nom</label><strong>{candidat.nomComplet || "-"}</strong></div>
-            <div><label>CIN</label><strong>{candidat.cin || "-"}</strong></div>
-            <div><label>Telephone</label><strong>{candidat.telephone || "-"}</strong></div>
-            <div><label>Age</label><strong>{candidat.age || "-"}</strong></div>
-            <div><label>Niveau scolaire</label><strong>{candidat.niveauEtudes || "-"}</strong></div>
-            <div><label>Adresse</label><strong>{candidat.adresse || "-"}</strong></div>
+            <div><label>NOM</label><strong>{displayCandidateValue(candidat.nomComplet, candidat.nom)}</strong></div>
+            <div><label>CIN</label><strong>{displayCandidateValue(candidat.cin)}</strong></div>
+            <div><label>TELEPHONE</label><strong>{displayCandidateValue(candidat.telephone)}</strong></div>
+            <div><label>AGE</label><strong>{displayCandidateValue(candidat.age)}</strong></div>
+            <div><label>GENRE</label><strong>{displayCandidateValue(candidat.genre, candidat.sexe)}</strong></div>
+            <div><label>NIVEAU SCOLAIRE</label><strong>{displayCandidateValue(candidat.niveauEtudes, candidat.niveau_scolaire, candidat.niveau_etudes)}</strong></div>
+            <div><label>POSTE</label><strong>{displayCandidateValue(candidat.posteVise, candidat.poste)}</strong></div>
+            <div><label>ADRESSE</label><strong>{displayCandidateValue(candidat.adresse)}</strong></div>
           </div>
         </article>
 

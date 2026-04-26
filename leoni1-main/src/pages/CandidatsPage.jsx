@@ -15,6 +15,7 @@ const ENTRETIEN_NOK = "NOK";
 const ENTRETIEN_ATTENTE = "EN_ATTENTE";
 const TYPE_CANDIDAT_CONTRACT_SESSION = "contract_session_pending";
 const statutChoices = ["Tous", STATUS_NOUVEAU, STATUS_REINTEGRE, STATUS_ACCEPTE, STATUS_REFUSE];
+const ALLOWED_GENRES = ["Femme", "Homme"];
 
 const candidateTypes = [
   {
@@ -209,18 +210,25 @@ function buildCandidateFormValues(source = {}) {
     cin: sanitizeDigits(source.cin, MAX_CIN_LENGTH),
     telephone: sanitizeDigits(source.telephone, MAX_PHONE_LENGTH),
     age: sanitizeDigits(source.age, MAX_AGE_LENGTH),
+    genre: String(source.genre || source.sexe || ""),
     niveauScolaire: String(source.niveauScolaire || source.niveau_scolaire || source.niveauEtudes || ""),
     poste: String(source.poste || source.posteVise || postes[0] || ""),
     adresse: String(source.adresse || ""),
   };
 }
 
-function validateCandidateFields(values) {
+function isValidGenre(value) {
+  return ALLOWED_GENRES.includes(String(value || "").trim());
+}
+
+function validateCandidateFields(values, options = {}) {
+  const { requireGenre = false } = options;
   const nextErrors = {};
   const trimmedNom = values.nom.trim();
   const trimmedCin = values.cin.trim();
   const trimmedTelephone = values.telephone.trim();
   const trimmedAge = values.age.trim();
+  const trimmedGenre = String(values.genre || "").trim();
   const trimmedNiveau = values.niveauScolaire.trim();
   const trimmedPoste = values.poste.trim();
   const trimmedAdresse = values.adresse.trim();
@@ -247,6 +255,12 @@ function validateCandidateFields(values) {
     nextErrors.age = "L'age doit etre un nombre valide.";
   }
 
+  if (requireGenre && !trimmedGenre) {
+    nextErrors.genre = "Le genre est obligatoire.";
+  } else if (requireGenre && !isValidGenre(trimmedGenre)) {
+    nextErrors.genre = "Le genre doit etre Femme ou Homme.";
+  }
+
   if (!trimmedNiveau) {
     nextErrors.niveauScolaire = "Le niveau scolaire est obligatoire.";
   }
@@ -262,8 +276,9 @@ function validateCandidateFields(values) {
   return nextErrors;
 }
 
-function buildCandidatePayload(values) {
-  return {
+function buildCandidatePayload(values, options = {}) {
+  const { includeGenre = false } = options;
+  const payload = {
     nom: values.nom.trim(),
     cin: values.cin.trim(),
     telephone: values.telephone.trim(),
@@ -272,6 +287,12 @@ function buildCandidatePayload(values) {
     poste: values.poste.trim(),
     adresse: values.adresse.trim(),
   };
+
+  if (includeGenre) {
+    payload.genre = String(values.genre || "").trim();
+  }
+
+  return payload;
 }
 
 function getEntretienMeta(value) {
@@ -312,6 +333,7 @@ function mapApiCandidate(candidate) {
     cin: candidate?.cin || "",
     telephone: candidate?.telephone || "",
     age: candidate?.age ? String(candidate.age) : "",
+    genre: candidate?.genre || "",
     adresse: candidate?.adresse || "",
     niveauEtudes: candidate?.niveauEtudes || candidate?.niveau_etudes || candidate?.niveau_scolaire || "",
     posteVise: candidate?.poste || "",
@@ -348,6 +370,7 @@ export default function CandidatsPage() {
   const [cin, setCin] = useState("");
   const [telephone, setTelephone] = useState("");
   const [age, setAge] = useState("");
+  const [genre, setGenre] = useState("");
   const [niveauScolaire, setNiveauScolaire] = useState("");
   const [poste, setPoste] = useState(postes[0] || "");
   const [adresse, setAdresse] = useState("");
@@ -598,6 +621,7 @@ export default function CandidatsPage() {
     setCin("");
     setTelephone("");
     setAge("");
+    setGenre("");
     setNiveauScolaire("");
     setPoste(postes[0] || "");
     setAdresse("");
@@ -611,10 +635,11 @@ export default function CandidatsPage() {
       cin,
       telephone,
       age,
+      genre,
       niveauScolaire,
       poste,
       adresse,
-    });
+    }, { requireGenre: true });
     setErrors(nextErrors);
     const isValid = Object.keys(nextErrors).length === 0;
     setSubmissionMessage(isValid ? "" : "Veuillez corriger les champs obligatoires avant d'ajouter le candidat.");
@@ -642,15 +667,16 @@ export default function CandidatsPage() {
       return;
     }
 
-    const data = buildCandidatePayload({
-      nom,
-      cin,
-      telephone,
-      age,
-      niveauScolaire,
-      poste,
-      adresse,
-    });
+    const data = {
+      nom: nom.trim(),
+      cin: cin.trim(),
+      telephone: telephone.trim(),
+      age: Number(age.trim()),
+      niveau_scolaire: niveauScolaire.trim(),
+      poste: poste.trim(),
+      adresse: adresse.trim(),
+      genre: String(genre || "").trim(),
+    };
 
     try {
       const response = await fetch("http://localhost:3000/api/candidats", {
@@ -854,6 +880,25 @@ if (!response.ok) {
             {errors.age && <span className="cand-create-error">{errors.age}</span>}
           </div>
 
+          <div className={`cand-create-field ${errors.genre ? "is-invalid" : ""}`}>
+            <label htmlFor="cand-genre">Genre</label>
+            <select
+              id="cand-genre"
+              value={genre}
+              onChange={(e) => {
+                setGenre(e.target.value);
+                clearFieldError("genre");
+              }}
+              required
+              aria-invalid={Boolean(errors.genre)}
+            >
+              <option value="">Sélectionner un genre</option>
+              <option value="Femme">Femme</option>
+              <option value="Homme">Homme</option>
+            </select>
+            {errors.genre && <span className="cand-create-error">{errors.genre}</span>}
+          </div>
+
           <div className={`cand-create-field ${errors.niveauScolaire ? "is-invalid" : ""}`}>
             <label htmlFor="cand-niveau">Niveau scolaire</label>
             <select
@@ -1042,6 +1087,10 @@ if (!response.ok) {
                       <div>
                         <label>Age</label>
                         <strong>{c.age || "-"}</strong>
+                      </div>
+                      <div>
+                        <label>GENRE</label>
+                        <strong>{c.genre || "-"}</strong>
                       </div>
                       <div>
                         <label>Niveau scolaire</label>

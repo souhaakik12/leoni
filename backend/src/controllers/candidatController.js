@@ -1,6 +1,7 @@
 const sql = require("mssql");
 const config = require("../../config");
 const candidatModel = require("../models/candidatModel");
+const ALLOWED_GENRES = ["Femme", "Homme"];
 
 function readTrimmed(body, ...keys) {
     for (const key of keys) {
@@ -48,7 +49,8 @@ exports.listerCandidats = async (_req, res) => {
                 ${metadata.has_statut ? "statut" : "CAST(NULL AS VARCHAR(50)) AS statut"},
                 ${metadata.has_age ? "age" : "CAST(NULL AS INT) AS age"},
                 ${metadata.has_niveau_scolaire ? "niveau_scolaire" : "CAST(NULL AS VARCHAR(255)) AS niveau_scolaire"},
-                ${metadata.has_adresse ? "adresse" : "CAST(NULL AS VARCHAR(255)) AS adresse"}
+                ${metadata.has_adresse ? "adresse" : "CAST(NULL AS VARCHAR(255)) AS adresse"},
+                genre
             FROM dbo.candidats
             ORDER BY id DESC;
         `;
@@ -63,6 +65,8 @@ exports.listerCandidats = async (_req, res) => {
 
 exports.createCandidat = async (req, res) => {
     try {
+        console.log("BODY CANDIDAT =", req.body);
+
         const nom = readTrimmed(req.body, "nom");
         const cin = readTrimmed(req.body, "cin");
         const telephone = readTrimmed(req.body, "telephone");
@@ -70,11 +74,20 @@ exports.createCandidat = async (req, res) => {
         const niveauScolaire = readTrimmed(req.body, "niveau_scolaire", "niveauScolaire", "niveauEtudes");
         const poste = readTrimmed(req.body, "poste");
         const adresse = readTrimmed(req.body, "adresse");
+        const genre = readTrimmed(req.body, "genre");
 
         if (!nom || !cin || !telephone || !age || !niveauScolaire || !poste || !adresse) {
             return res.status(400).json({
                 message: "Tous les champs sont obligatoires : nom, cin, telephone, age, niveau_scolaire, poste et adresse.",
             });
+        }
+
+        if (!genre) {
+            return res.status(400).json({ message: "Genre obligatoire." });
+        }
+
+        if (!ALLOWED_GENRES.includes(genre)) {
+            return res.status(400).json({ message: "Genre invalide" });
         }
 
         if (!/^\d{8}$/.test(cin)) {
@@ -97,6 +110,7 @@ exports.createCandidat = async (req, res) => {
             niveau_scolaire: niveauScolaire,
             poste,
             adresse,
+            genre,
         });
 
         return res.status(201).json({
@@ -121,6 +135,7 @@ exports.updateCandidat = async (req, res) => {
         const niveauScolaire = readTrimmed(req.body, "niveau_scolaire", "niveauScolaire", "niveauEtudes");
         const poste = readTrimmed(req.body, "poste");
         const adresse = readTrimmed(req.body, "adresse");
+        const genre = readTrimmed(req.body, "genre");
 
         if (!Number.isInteger(id) || id <= 0) {
             return res.status(400).json({ message: "Identifiant candidat invalide." });
@@ -144,6 +159,10 @@ exports.updateCandidat = async (req, res) => {
             });
         }
 
+        if (genre && !ALLOWED_GENRES.includes(genre)) {
+            return res.status(400).json({ message: "Genre invalide" });
+        }
+
         const candidat = await candidatModel.updateCandidat(id, {
             nom,
             cin,
@@ -152,6 +171,7 @@ exports.updateCandidat = async (req, res) => {
             niveau_scolaire: niveauScolaire,
             poste,
             adresse,
+            ...(genre ? { genre } : {}),
         });
 
         if (!candidat) {

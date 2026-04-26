@@ -25,14 +25,15 @@ async function getCandidateSchema(pool) {
 async function createCandidat(data) {
     const pool = await sql.connect(config);
     const schema = await getCandidateSchema(pool);
-    const columns = ["nom", "cin", "telephone", "poste"];
-    const values = ["@nom", "@cin", "@telephone", "@poste"];
+    const columns = ["nom", "cin", "telephone", "poste", "genre"];
+    const values = ["@nom", "@cin", "@telephone", "@poste", "@genre"];
 
     const request = pool.request()
         .input("nom", sql.VarChar, data.nom)
         .input("cin", sql.VarChar, data.cin)
         .input("telephone", sql.VarChar, data.telephone)
-        .input("poste", sql.VarChar, data.poste);
+        .input("poste", sql.VarChar, data.poste)
+        .input("genre", sql.NVarChar(20), data.genre);
 
     if (schema.has_age) {
         columns.push("age");
@@ -124,6 +125,11 @@ async function updateCandidat(id, data) {
     if (schema.has_adresse) {
         setClauses.push("adresse = @adresse");
         request.input("adresse", sql.VarChar, data.adresse);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(data, "genre")) {
+        setClauses.push("genre = @genre");
+        request.input("genre", sql.NVarChar(20), data.genre);
     }
 
     const query = `
