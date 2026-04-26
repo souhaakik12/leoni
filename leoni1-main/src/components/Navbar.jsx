@@ -34,6 +34,18 @@ const pageTitles = {
     title: "Service Contrats - Seances",
     sub: "Seances d'information contrat et affectation du type CDI/CAIP",
   },
+  "/profile": {
+    title: "Mon Profil",
+    sub: "Informations de compte et acces",
+  },
+  "/change-password": {
+    title: "Mot de Passe",
+    sub: "Mise a jour securisee des acces",
+  },
+  "/employees": {
+    title: "Utilisateurs",
+    sub: "Gestion des comptes du systeme",
+  },
 };
 
 const roleBadge = {

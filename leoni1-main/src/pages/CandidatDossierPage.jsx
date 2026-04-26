@@ -109,6 +109,16 @@ function getInterviewFormFromInterview(interview, candidat) {
   };
 }
 
+function buildSelectOptions(options, currentValue) {
+  const normalizedCurrentValue = String(currentValue || "").trim();
+  if (!normalizedCurrentValue) {
+    return options;
+  }
+  return options.includes(normalizedCurrentValue)
+    ? options
+    : [normalizedCurrentValue, ...options];
+}
+
 function getInterviewResultLabel(value) {
   const normalized = normalizeInterviewResult(value);
   if (normalized === ENTRETIEN_OK) return "OK";
@@ -150,6 +160,9 @@ export default function CandidatDossierPage() {
   const [isInterviewLoading, setIsInterviewLoading] = useState(false);
   const [isInterviewSaving, setIsInterviewSaving] = useState(false);
   const [allowNewInterview, setAllowNewInterview] = useState(false);
+  const [fonctionOptions, setFonctionOptions] = useState([]);
+  const [segmentOptions, setSegmentOptions] = useState([]);
+  const [projetOptions, setProjetOptions] = useState([]);
   const fromContracts = search.includes("from=contracts") || user?.role === "contrats";
   const backPath = fromContracts ? "/contracts/reception" : "/candidats/test";
 
@@ -164,6 +177,43 @@ export default function CandidatDossierPage() {
   const interviewLockedByOk = latestInterviewResult === ENTRETIEN_OK;
   const interviewLockedByNok = latestInterviewResult === ENTRETIEN_NOK && !allowNewInterview;
   const isInterviewFormDisabled = isInterviewLoading || isInterviewSaving || interviewLockedByOk || interviewLockedByNok;
+  const fonctionSelectOptions = buildSelectOptions(fonctionOptions, form.fonction);
+  const segmentSelectOptions = buildSelectOptions(segmentOptions, form.segment);
+  const projetSelectOptions = buildSelectOptions(projetOptions, form.projet);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadEntretienOptions() {
+      try {
+        const response = await fetch("http://localhost:3000/api/references/entretien-options");
+        const payload = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          throw new Error(payload?.message || "Chargement des options entretien impossible.");
+        }
+
+        if (!cancelled) {
+          setFonctionOptions(Array.isArray(payload?.fonctions) ? payload.fonctions : []);
+          setSegmentOptions(Array.isArray(payload?.segments) ? payload.segments : []);
+          setProjetOptions(Array.isArray(payload?.projets) ? payload.projets : []);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setFonctionOptions([]);
+          setSegmentOptions([]);
+          setProjetOptions([]);
+        }
+      }
+    }
+
+    loadEntretienOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const loadRegisteredDocuments = async (candidateId, options = {}) => {
     const { silent = false } = options;
@@ -535,30 +585,48 @@ export default function CandidatDossierPage() {
             </div>
             <div>
               <label>Fonction</label>
-              <input
+              <select
                 value={form.fonction}
                 onChange={(e) => setForm((p) => ({ ...p, fonction: e.target.value }))}
-                placeholder="Fonction"
                 disabled={isInterviewFormDisabled}
-              />
+              >
+                <option value="">Sélectionner une fonction</option>
+                {fonctionSelectOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label>Segment</label>
-              <input
+              <select
                 value={form.segment}
                 onChange={(e) => setForm((p) => ({ ...p, segment: e.target.value }))}
-                placeholder="Segment"
                 disabled={isInterviewFormDisabled}
-              />
+              >
+                <option value="">Sélectionner un segment</option>
+                {segmentSelectOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label>Projet</label>
-              <input
+              <select
                 value={form.projet}
                 onChange={(e) => setForm((p) => ({ ...p, projet: e.target.value }))}
-                placeholder="Projet"
                 disabled={isInterviewFormDisabled}
-              />
+              >
+                <option value="">Sélectionner un projet</option>
+                {projetSelectOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label>Resultat entretien</label>

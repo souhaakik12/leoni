@@ -5,7 +5,10 @@ const candidatRoutes = require("./src/routes/candidatRoutes");
 const documentContratRoutes = require("./src/routes/documentContratRoutes");
 const seanceContratRoutes = require("./src/routes/seanceContratRoutes");
 const testEntretienRoutes = require("./src/routes/testEntretienRoutes");
+const referenceRoutes = require("./src/routes/referenceRoutes");
 const documentRoutes = require("./src/routes/documentRoutes");
+const authRoutes = require("./src/routes/authRoutes");
+const utilisateurRoutes = require("./src/routes/utilisateurRoutes");
 const foyerRoutes = require("./routes/foyerRoutes");
 const residentRoutes = require("./routes/residentRoutes");
 const {
@@ -26,9 +29,12 @@ app.use("/api/candidats", (req, _res, next) => {
 console.log("[BOOT] montage des routes /api/candidats");
 app.use("/api/candidats", candidatRoutes);
 app.use("/api/candidats", documentContratRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/utilisateurs", utilisateurRoutes);
 app.use("/api/seances-contrat", requireRole(CONTRACT_ALLOWED_ROLES));
 app.use("/api/seances-contrat", seanceContratRoutes);
 app.use("/api/test-entretien", testEntretienRoutes);
+app.use("/api/references", referenceRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api", foyerRoutes);
 app.use("/api", residentRoutes);

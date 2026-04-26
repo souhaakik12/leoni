@@ -34,9 +34,7 @@ export default function LoginPage() {
 
     setLoading(true);
     setError("");
-    await new Promise((r) => setTimeout(r, 500));
-
-    const result = login(email, password);
+    const result = await login(email, password);
     setLoading(false);
 
     if (result.success) {
@@ -44,7 +42,7 @@ export default function LoginPage() {
       return;
     }
 
-    setError("Email ou mot de passe incorrect.");
+    setError(result.message || "Email ou mot de passe incorrect");
   };
 
   const handleKeyDown = (e) => {
@@ -102,11 +100,11 @@ export default function LoginPage() {
                 <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
                 <span>Remember me</span>
               </label>
-              <button className="ghost-link" onClick={(e) => e.preventDefault()}>Forgot your password?</button>
+              <button className="ghost-link" onClick={() => navigate("/forgot-password")}>Mot de passe oublie ?</button>
             </div>
 
             <button className="login-submit" onClick={handleSubmit} disabled={loading}>
-              {loading ? "Log in..." : "Log in"}
+              {loading ? "Connexion..." : "Se connecter"}
             </button>
 
             <div className="demo-label">Demo accounts</div>

@@ -28,8 +28,8 @@ const candidateTypes = [
   },
   {
     id: "test_passed",
-    short: "Test",
-    title: "Test valide",
+    short: "Test / Entretien",
+    title: "Candidats en phase test et entretien",
     desc: "Passage entretien avec resultat OK ou NOK.",
     headerClass: "test",
     badgeBg: "#e4f3fb",

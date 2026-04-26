@@ -15,6 +15,9 @@ import RecruteurDashboard from "./pages/RecruteurDashboard.jsx";
 import ContractReceptionPage from "./pages/ContractReceptionPage.jsx";
 import ContractSessionsPage from "./pages/ContractSessionsPage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage.jsx";
+import ResetPasswordPage from "./pages/ResetPasswordPage.jsx";
+import EmployeesPage from "./pages/EmployeesPage.jsx";
 import CreateMissionPage from "./pages/CreateMissionPage.jsx";
 import CandidatsPage from "./pages/CandidatsPage.jsx";
 import CandidatDossierPage from "./pages/CandidatDossierPage.jsx";
@@ -24,14 +27,18 @@ import {
   ROLE_RECRUTEUR,
   ROLE_RESPONSABLE_CONTRAT,
   getHomeRouteForRole,
+  hasFoyerAccess,
   hasRole,
 } from "./utils/roles.js";
 import "./App.css";
 
-function ProtectedRoute({ children, allowedRoles }) {
+function ProtectedRoute({ children, allowedRoles, accessCheck }) {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
   if (allowedRoles && !hasRole(user, allowedRoles)) {
+    return <Navigate to={getHomeRouteForRole(user.role)} replace />;
+  }
+  if (accessCheck && !accessCheck(user)) {
     return <Navigate to={getHomeRouteForRole(user.role)} replace />;
   }
   return children;
@@ -53,10 +60,10 @@ function AppLayout() {
               <ProtectedRoute allowedRoles={[ROLE_ADMIN]}><HomePage /></ProtectedRoute>
             } />
             <Route path="/dorms" element={
-              <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RECRUTEUR]}><DormsPage /></ProtectedRoute>
+              <ProtectedRoute accessCheck={hasFoyerAccess}><DormsPage /></ProtectedRoute>
             } />
             <Route path="/dorms/:dormId" element={
-              <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RECRUTEUR]}><DormResidentsPage /></ProtectedRoute>
+              <ProtectedRoute accessCheck={hasFoyerAccess}><DormResidentsPage /></ProtectedRoute>
             } />
             <Route path="/missions" element={
               <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RECRUTEUR]}>
@@ -87,7 +94,13 @@ function AppLayout() {
               <ProtectedRoute allowedRoles={CONTRACT_ACCESS_ROLES}><ContractSessionsPage /></ProtectedRoute>
             } />
             <Route path="/profile" element={
-              <ProtectedRoute allowedRoles={[ROLE_RECRUTEUR, ROLE_RESPONSABLE_CONTRAT]}><ProfilePage /></ProtectedRoute>
+              <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RECRUTEUR, ROLE_RESPONSABLE_CONTRAT]}><ProfilePage /></ProtectedRoute>
+            } />
+            <Route path="/change-password" element={
+              <Navigate to="/profile" replace />
+            } />
+            <Route path="/employees" element={
+              <ProtectedRoute allowedRoles={[ROLE_ADMIN]}><EmployeesPage /></ProtectedRoute>
             } />
             <Route path="*" element={<Navigate to={getHomeRouteForRole(user.role)} replace />} />
           </Routes>
@@ -113,6 +126,8 @@ export default function App() {
           <RecrutementsProvider>
           <Routes>
             <Route path="/login" element={<LoginPageWrapper />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/*"    element={<AppLayout />} />
           </Routes>
           </RecrutementsProvider>

@@ -5,6 +5,7 @@ import {
   ROLE_ADMIN,
   ROLE_RECRUTEUR,
   ROLE_RESPONSABLE_CONTRAT,
+  hasFoyerAccess,
   hasRole,
 } from "../utils/roles.js";
 
@@ -30,7 +31,7 @@ const allNavItems = [
   {
     path: "/dorms",
     label: "Foyers",
-    roles: [ROLE_ADMIN, ROLE_RECRUTEUR],
+    accessCheck: hasFoyerAccess,
     icon: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
   },
   {
@@ -54,14 +55,23 @@ const allNavItems = [
   {
     path: "/profile",
     label: "Mon Profil",
-    roles: [ROLE_RECRUTEUR, ROLE_RESPONSABLE_CONTRAT],
+    roles: [ROLE_ADMIN, ROLE_RECRUTEUR, ROLE_RESPONSABLE_CONTRAT],
     icon: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+  },
+  {
+    path: "/employees",
+    label: "Utilisateurs",
+    roles: [ROLE_ADMIN],
+    icon: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>,
   },
 ];
 
 export default function Sidebar({ isOpen }) {
   const { user, logout } = useAuth();
-  const navItems = allNavItems.filter((item) => hasRole(user, item.roles));
+  const navItems = allNavItems.filter((item) => {
+    if (item.accessCheck) return item.accessCheck(user);
+    return hasRole(user, item.roles);
+  });
 
   return (
     <aside style={{
