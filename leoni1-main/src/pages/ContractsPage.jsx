@@ -1,193 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useRecrutements } from "../context/RecrutementsContext.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
+import { buildRoleHeaders } from "../utils/roles.js";
 import "./ContractsPage.css";
 
-const seedContracts = [
-  {
-    id: 1,
-    cin: "12458796",
-    nomPrenom: "Fatima Zahra El Idrissi",
-    telephone: "22 458 796",
-    email: "fatima.elidrissi@leoni.test",
-    poste: "Operatrice chaine",
-    typeContrat: "CDD",
-    dateSignature: "08/02/2026",
-    dateDebutContrat: "10/02/2026",
-    dateFinContrat: "15/04/2026",
-    statutContrat: "Expire",
-  },
-  {
-    id: 2,
-    cin: "11895237",
-    nomPrenom: "Amina Bennani",
-    telephone: "20 895 237",
-    email: "amina.bennani@leoni.test",
-    poste: "Chargee logistique",
-    typeContrat: "CDD",
-    dateSignature: "16/02/2026",
-    dateDebutContrat: "18/02/2026",
-    dateFinContrat: "20/04/2026",
-    statutContrat: "Expire",
-  },
-  {
-    id: 3,
-    cin: "13145789",
-    nomPrenom: "Khadija Alami",
-    telephone: "21 145 789",
-    email: "khadija.alami@leoni.test",
-    poste: "Controleuse qualite",
-    typeContrat: "CDD",
-    dateSignature: "01/03/2026",
-    dateDebutContrat: "03/03/2026",
-    dateFinContrat: "28/04/2026",
-    statutContrat: "A renouveler",
-  },
-  {
-    id: 4,
-    cin: "10774589",
-    nomPrenom: "Mohamed Tahar",
-    telephone: "29 774 589",
-    email: "mohamed.tahar@leoni.test",
-    poste: "Technicien maintenance",
-    typeContrat: "CDI",
-    dateSignature: "10/01/2026",
-    dateDebutContrat: "12/01/2026",
-    dateFinContrat: "-",
-    statutContrat: "Actif",
-  },
-  {
-    id: 5,
-    cin: "11590248",
-    nomPrenom: "Sana Karoui",
-    telephone: "25 590 248",
-    email: "sana.karoui@leoni.test",
-    poste: "Assistante RH",
-    typeContrat: "CDI",
-    dateSignature: "05/01/2026",
-    dateDebutContrat: "07/01/2026",
-    dateFinContrat: "-",
-    statutContrat: "Actif",
-  },
-];
-
-const PAGE_SIZE_OPTIONS = [6, 10, 14];
-const STATIC_RENEWAL_ALERTS = [
-  {
-    id: "renewal-urgent",
-    title: "Contrat proche d'expiration",
-    headline: "CAIP arrive a expiration dans 7 jours",
-    nomPrenom: "Ines Ben Salem",
-    matricule: "CAIP-1042",
-    typeContrat: "CAIP",
-    dateDebutContrat: "01/11/2025",
-    dateFinContrat: "01/05/2026",
-    joursRestants: 7,
-    segment: "Assemblage",
-    fonction: "Operatrice cablage",
-    projet: "Harness A1",
-    site: "Mghira",
-    responsable: "Nadia Salem",
-    statutAlerte: "Ouverte",
-    niveau: "urgent",
-    description:
-      "Le contrat temporaire entre dans sa fenetre critique de renouvellement. Sans arbitrage rapide, la continuite de presence sur ligne risque d'etre interrompue.",
-    detail:
-      "Le collaborateur a termine l'ensemble des etapes contractuelles et le besoin production reste confirme par le manager de secteur. La date de fin approche sans decision formelle enregistree.",
-    actionRecommandee:
-      "Valider la decision de renouvellement avant le 29/04/2026, preparer l'avenant et confirmer le circuit de signature avec le responsable contrat.",
-    suivi:
-      "Derniere relance RH envoyee ce matin. Le responsable d'unite a confirme le maintien du besoin, en attente de validation finale.",
-    criticite: 92,
-    timeline: [
-      { label: "Signal detecte", state: "done" },
-      { label: "Verification RH", state: "current" },
-      { label: "Decision manager", state: "upcoming" },
-    ],
-  },
-  {
-    id: "renewal-action",
-    title: "Renouvellement a preparer",
-    headline: "CIVP arrive a expiration dans 15 jours",
-    nomPrenom: "Amani Triki",
-    matricule: "CIVP-2078",
-    typeContrat: "CIVP",
-    dateDebutContrat: "09/11/2025",
-    dateFinContrat: "09/05/2026",
-    joursRestants: 15,
-    segment: "Qualite",
-    fonction: "Controleuse qualite",
-    projet: "Quality Q4",
-    site: "Mghira",
-    responsable: "Imen Trabelsi",
-    statutAlerte: "A planifier",
-    niveau: "action",
-    description:
-      "Le contrat doit etre examine dans le prochain point RH afin d'anticiper le renouvellement et d'eviter une validation en urgence.",
-    detail:
-      "Le poste reste actif et l'equipe qualite souhaite conserver la ressource. Les pieces administratives sont a jour mais la planification de signature n'est pas encore reservee.",
-    actionRecommandee:
-      "Programmer la revue contrat cette semaine, verifier l'enveloppe disponible et lancer la preparation du dossier de prolongation.",
-    suivi:
-      "Le dossier est complet a 80 %. La date de passage en comite est proposee pour la semaine prochaine.",
-    criticite: 67,
-    timeline: [
-      { label: "Signal detecte", state: "done" },
-      { label: "Revue contrat", state: "current" },
-      { label: "Preparation signature", state: "upcoming" },
-    ],
-  },
-  {
-    id: "renewal-info",
-    title: "Contrat a surveiller",
-    headline: "SIVP arrive a expiration dans 30 jours",
-    nomPrenom: "Mariem Chiboub",
-    matricule: "SIVP-3315",
-    typeContrat: "SIVP",
-    dateDebutContrat: "24/11/2025",
-    dateFinContrat: "24/05/2026",
-    joursRestants: 30,
-    segment: "Logistique",
-    fonction: "Assistante logistique",
-    projet: "Supply B2",
-    site: "Sousse",
-    responsable: "Rym Gharbi",
-    statutAlerte: "Information",
-    niveau: "info",
-    description:
-      "Le contrat n'est pas encore critique mais doit etre inscrit dans le plan de suivi mensuel pour garder une vision claire des echeances a venir.",
-    detail:
-      "Le besoin metier reste stable et aucune non-conformite n'est remontee. L'alerte sert surtout a garder une trace centralisee dans l'interface contrats.",
-    actionRecommandee:
-      "Maintenir le contrat dans le radar hebdomadaire et confirmer l'intention de renouvellement lors du prochain point manager.",
-    suivi:
-      "Aucun blocage identifie. Le prochain controle administratif est prevu dans deux semaines.",
-    criticite: 38,
-    timeline: [
-      { label: "Surveillance", state: "current" },
-      { label: "Point manager", state: "upcoming" },
-      { label: "Decision RH", state: "upcoming" },
-    ],
-  },
-];
+const CONTRACTS_API_ENDPOINT = "http://localhost:3000/api/contrats";
+const DEFAULT_PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const TAB_CONTRACTS = "liste";
+const TAB_ALERTS = "alertes";
 
 const RENEWAL_ALERT_THEMES = {
   urgent: {
     label: "Urgent",
     className: "is-urgent",
-    accentTone: "danger",
     indicatorLabel: "Traitement immediat requis",
   },
   action: {
     label: "A traiter",
     className: "is-action",
-    accentTone: "warning",
     indicatorLabel: "Traitement prioritaire",
   },
   info: {
     label: "Information",
     className: "is-info",
-    accentTone: "info",
     indicatorLabel: "Surveillance active",
   },
 };
@@ -198,6 +34,15 @@ function normalizeText(value) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+}
+
+function toFiniteNumber(value) {
+  if (value === null || value === undefined) return null;
+  const normalizedValue = String(value).trim();
+  if (!normalizedValue) return null;
+
+  const parsed = Number(normalizedValue);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function parseDateValue(value) {
@@ -227,16 +72,26 @@ function formatDate(value) {
   });
 }
 
-function computeDaysRemaining(dateFin) {
-  const endDate = parseDateValue(dateFin);
-  if (!endDate) return null;
+function formatNumericDays(days) {
+  if (days < 0) return `Expir\u00e9`;
+  if (days <= 1) return `${days} jour`;
+  return `${days} jours`;
+}
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  endDate.setHours(0, 0, 0, 0);
+function formatDaysValue(daysValue, displayValue) {
+  const explicitDisplay = String(displayValue ?? "").trim();
+  if (explicitDisplay) {
+    const explicitNumber = toFiniteNumber(explicitDisplay);
+    if (explicitNumber !== null) {
+      return formatNumericDays(explicitNumber);
+    }
+    return explicitDisplay;
+  }
 
-  const diffMs = endDate.getTime() - today.getTime();
-  return Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  const numericDays = toFiniteNumber(daysValue);
+  if (numericDays === null) return "-";
+
+  return formatNumericDays(numericDays);
 }
 
 function getCompactPagination(currentPage, totalPages) {
@@ -249,38 +104,70 @@ function getCompactPagination(currentPage, totalPages) {
   );
 }
 
+function mapContractRow(contract, index) {
+  return {
+    id: contract.id_contrat ?? contract.id ?? `contract-${contract.cin || "row"}-${index + 1}`,
+    cin: String(contract.cin ?? "").trim() || "-",
+    nomPrenom: contract.nom_prenom ?? contract.nomPrenom ?? "-",
+    genre: contract.genre ?? "-",
+    fonction: contract.fonction ?? "-",
+    segment: contract.segment ?? "-",
+    projet: contract.projet ?? "-",
+    site: contract.site ?? "-",
+    typeContrat: contract.type_contrat ?? contract.typeContrat ?? "-",
+    dateSignature: contract.date_signature ?? contract.dateSignature ?? "-",
+    dateDebutContrat: contract.date_debut_contrat ?? contract.dateDebutContrat ?? "-",
+    dateFinContrat: contract.date_fin_contrat ?? contract.dateFinContrat ?? "-",
+    statutContrat: contract.statut_contrat ?? contract.statutContrat ?? "",
+    joursRestants: toFiniteNumber(contract.jours_restants ?? contract.joursRestants),
+    joursRestantsAffichage:
+      contract.jours_restants_affichage ?? contract.joursRestantsAffichage ?? "",
+    alerte: contract.alerte ?? "",
+  };
+}
+
 function deriveContractStatus(contract) {
   const explicitStatus = normalizeText(contract?.statutContrat || contract?.statut_contrat);
-  if (explicitStatus.includes("expire")) return "Expire";
-  if (explicitStatus.includes("renouvel")) return "A renouveler";
-  if (explicitStatus.includes("attente")) return "En attente";
-  if (explicitStatus.includes("signe")) return "Signe";
-  if (explicitStatus.includes("actif")) return "Actif";
+  if (explicitStatus.includes("expire")) return "EXPIRE";
+  if (explicitStatus.includes("renouvel")) return "RENOUVELE";
+  if (explicitStatus.includes("signe")) return "SIGNE";
+  if (explicitStatus.includes("actif")) return "ACTIF";
 
-  const daysRemaining = contract?.joursRestants;
-  if (daysRemaining !== null && daysRemaining !== undefined) {
-    if (daysRemaining < 0) return "Expire";
-    if (daysRemaining <= 45) return "A renouveler";
-  }
+  const alertState = deriveAlertState(contract);
+  if (alertState.tone === "danger") return "EXPIRE";
 
-  return "Actif";
+  return "ACTIF";
 }
 
 function deriveAlertState(contract) {
-  const normalizedType = normalizeText(contract?.typeContrat);
-  const daysRemaining = contract?.joursRestants;
-  const hasEndDate = Boolean(parseDateValue(contract?.dateFinContrat));
-
-  if (!hasEndDate || normalizedType === "cdi" || normalizedType.includes("sans date fin")) {
-    return { label: "CDI / Sans date fin", tone: "soft" };
+  const explicitAlert = normalizeText(contract?.alerte);
+  if (explicitAlert.includes("proche")) {
+    return { label: "Proche expiration", tone: "warning" };
+  }
+  if (explicitAlert.includes("expir")) {
+    return { label: `Expir\u00e9`, tone: "danger" };
+  }
+  if (explicitAlert.includes("date manquante")) {
+    return { label: "Date manquante", tone: "soft" };
+  }
+  if (explicitAlert.includes("actif")) {
+    return { label: "Actif", tone: "success" };
   }
 
-  if (daysRemaining === null || daysRemaining === undefined) {
+  const normalizedType = normalizeText(contract?.typeContrat);
+  const daysRemaining = toFiniteNumber(contract?.joursRestants);
+  const hasEndDate = Boolean(parseDateValue(contract?.dateFinContrat));
+
+  if (!hasEndDate || normalizedType === "cdi" || normalizedType.includes("sans essai")) {
+    return { label: "Date manquante", tone: "soft" };
+  }
+
+  if (daysRemaining === null) {
     return { label: "Actif", tone: "success" };
   }
 
   if (daysRemaining < 0) {
-    return { label: "Expire", tone: "danger" };
+    return { label: `Expir\u00e9`, tone: "danger" };
   }
 
   if (daysRemaining <= 45) {
@@ -291,40 +178,129 @@ function deriveAlertState(contract) {
 }
 
 function formatDaysRemaining(contract) {
-  const hasEndDate = Boolean(parseDateValue(contract?.dateFinContrat));
-  const daysRemaining = contract?.joursRestants;
-
-  if (!hasEndDate || daysRemaining === null || daysRemaining === undefined) {
-    return "-";
-  }
-
-  if (daysRemaining < 0) return "Expire";
-  if (daysRemaining <= 1) return `${daysRemaining} jour`;
-  return `${daysRemaining} jours`;
+  return formatDaysValue(contract?.joursRestants, contract?.joursRestantsAffichage);
 }
 
 function getDaysClassName(contract) {
-  const hasEndDate = Boolean(parseDateValue(contract?.dateFinContrat));
-  const daysRemaining = contract?.joursRestants;
-
-  if (!hasEndDate || daysRemaining === null || daysRemaining === undefined) {
+  const daysLabel = formatDaysRemaining(contract);
+  if (daysLabel === "-") {
     return "contracts-days is-empty";
   }
 
-  if (daysRemaining < 0) return "contracts-days is-expired";
-  if (daysRemaining <= 45) return "contracts-days is-warning";
-  return "contracts-days is-positive";
+  const alertState = deriveAlertState(contract);
+  if (alertState.tone === "danger") return "contracts-days is-expired";
+  if (alertState.tone === "warning") return "contracts-days is-warning";
+  if (alertState.tone === "success") return "contracts-days is-positive";
+
+  return "contracts-days is-empty";
 }
 
 function getRenewalAlertTheme(level) {
   return RENEWAL_ALERT_THEMES[level] || RENEWAL_ALERT_THEMES.info;
 }
 
-function formatRenewalCountdown(daysRemaining) {
-  if (daysRemaining === null || daysRemaining === undefined) return "-";
-  if (daysRemaining < 0) return "Expire";
-  if (daysRemaining <= 1) return `${daysRemaining} jour`;
-  return `${daysRemaining} jours`;
+function formatRenewalCountdown(daysRemaining, displayValue) {
+  return formatDaysValue(daysRemaining, displayValue);
+}
+
+function buildAlertLevel(alertTone) {
+  if (alertTone === "danger") return "urgent";
+  if (alertTone === "warning") return "action";
+  return "info";
+}
+
+function buildAlertCriticity(alertTone, daysRemaining) {
+  if (alertTone === "danger") return 94;
+  if (alertTone === "warning") {
+    if (daysRemaining === null) return 70;
+    return Math.max(58, Math.min(88, 90 - Math.max(daysRemaining, 0)));
+  }
+  return 38;
+}
+
+function buildAlertTimeline(level) {
+  if (level === "urgent") {
+    return [
+      { label: "Signal detecte", state: "done" },
+      { label: "Verification RH", state: "current" },
+      { label: "Decision manager", state: "upcoming" },
+    ];
+  }
+
+  if (level === "action") {
+    return [
+      { label: "Signal detecte", state: "done" },
+      { label: "Revue contrat", state: "current" },
+      { label: "Preparation signature", state: "upcoming" },
+    ];
+  }
+
+  return [
+    { label: "Surveillance", state: "current" },
+    { label: "Point manager", state: "upcoming" },
+    { label: "Decision RH", state: "upcoming" },
+  ];
+}
+
+function buildRenewalAlert(contract) {
+  const alertState = deriveAlertState(contract);
+  const level = buildAlertLevel(alertState.tone);
+  const typeContrat = contract.typeContrat || "Contrat";
+  const nomPrenom = contract.nomPrenom || "Collaborateur";
+  const joursRestants = toFiniteNumber(contract.joursRestants);
+  const joursRestantsAffichage = contract.joursRestantsAffichage;
+  const daysLabel = formatRenewalCountdown(joursRestants, joursRestantsAffichage);
+  const isExpired = alertState.tone === "danger";
+  const criticite = buildAlertCriticity(alertState.tone, joursRestants);
+  const functionLabel = contract.fonction || "fonction non renseignee";
+  const projectLabel = contract.projet || "projet non renseigne";
+  const siteLabel = contract.site || "site non renseigne";
+  const segmentLabel = contract.segment || "segment non renseigne";
+
+  return {
+    id: `alert-${contract.id}`,
+    sourceId: contract.id,
+    title: isExpired ? "Contrat expire" : "Contrat proche d'expiration",
+    headline: isExpired
+      ? `${typeContrat} a depasse sa date de fin contractuelle`
+      : `${typeContrat} arrive a expiration dans ${daysLabel.toLowerCase()}`,
+    nomPrenom,
+    cin: contract.cin || "-",
+    typeContrat,
+    dateDebutContrat: contract.dateDebutContrat,
+    dateFinContrat: contract.dateFinContrat,
+    joursRestants,
+    joursRestantsAffichage,
+    segment: contract.segment,
+    fonction: contract.fonction,
+    projet: contract.projet,
+    site: contract.site,
+    statutAlerte: alertState.label,
+    niveau: level,
+    description: isExpired
+      ? `Le contrat de ${nomPrenom} a atteint son echeance et demande une decision rapide pour eviter une rupture de suivi administratif.`
+      : `Le contrat de ${nomPrenom} entre dans la fenetre de surveillance RH et doit etre traite avant la date limite de fin.`,
+    detail: `${nomPrenom} occupe la fonction ${functionLabel} sur ${projectLabel} (${siteLabel}), dans le segment ${segmentLabel}. La date de fin enregistree est ${formatDate(contract.dateFinContrat)}.`,
+    actionRecommandee: isExpired
+      ? "Verifier immediatement la situation contractuelle, arbitrer la suite a donner et preparer les validations necessaires."
+      : "Planifier le renouvellement, confirmer le besoin metier avec l'encadrement et lancer le circuit de signature avant l'echeance.",
+    suivi: `Statut contrat ${deriveContractStatus(contract)}. Alerte ${alertState.label}. Derniere verification a programmer avec le service RH.`,
+    criticite,
+    timeline: buildAlertTimeline(level),
+  };
+}
+
+function buildContractsUrl({ search, type }) {
+  const params = new URLSearchParams();
+
+  params.set("type", type === TAB_ALERTS ? TAB_ALERTS : TAB_CONTRACTS);
+
+  if (search) {
+    params.set("search", search);
+  }
+
+  const query = params.toString();
+  return query ? `${CONTRACTS_API_ENDPOINT}?${query}` : CONTRACTS_API_ENDPOINT;
 }
 
 function PaginationButton({ active, className = "", children, ...props }) {
@@ -341,12 +317,12 @@ function PaginationButton({ active, className = "", children, ...props }) {
 
 function TypeBadge({ value }) {
   const normalizedValue = normalizeText(value);
-  const tone =
-    normalizedValue === "cdi" || normalizedValue.includes("sans date fin")
-      ? "is-cdi"
-      : normalizedValue === "cdd"
-        ? "is-cdd"
-        : "is-default";
+  let tone = "is-default";
+
+  if (normalizedValue === "cdi") tone = "is-type-cdi";
+  else if (normalizedValue === "cdd") tone = "is-type-cdd";
+  else if (normalizedValue === "cdi sans essai") tone = "is-type-cdi-sans-essai";
+  else if (["caip", "civp", "sivp"].includes(normalizedValue)) tone = "is-type-program";
 
   return <span className={`contracts-badge ${tone}`}>{value || "-"}</span>;
 }
@@ -356,8 +332,8 @@ function ContractStatusBadge({ contract }) {
   const normalizedValue = normalizeText(value);
   let tone = "is-status-active";
   if (normalizedValue.includes("expire")) tone = "is-status-danger";
-  else if (normalizedValue.includes("renouvel")) tone = "is-status-warning";
-  else if (normalizedValue.includes("attente") || normalizedValue.includes("signe")) tone = "is-status-info";
+  else if (normalizedValue.includes("renouvel")) tone = "is-status-renewed";
+  else if (normalizedValue.includes("signe")) tone = "is-status-info";
 
   return <span className={`contracts-badge ${tone}`}>{value}</span>;
 }
@@ -376,152 +352,155 @@ function ActionMenu({ onConsult }) {
       <button type="button" className="contracts-action contracts-action--inline-secondary">
         Renouveler
       </button>
-      <button type="button" className="contracts-icon-button" title="Modifier">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-        </svg>
-      </button>
-      <button type="button" className="contracts-icon-button" title="Actions">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <circle cx="5" cy="12" r="2" />
-          <circle cx="12" cy="12" r="2" />
-          <circle cx="19" cy="12" r="2" />
-        </svg>
-      </button>
     </div>
   );
 }
 
 export default function ContractsPage() {
   const navigate = useNavigate();
-  const { candidats } = useRecrutements();
-  const [tab, setTab] = useState("liste");
+  const { user } = useAuth();
+  const [tab, setTab] = useState(TAB_CONTRACTS);
   const [search, setSearch] = useState("");
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedAlertId, setSelectedAlertId] = useState(STATIC_RENEWAL_ALERTS[0]?.id ?? null);
+  const [contracts, setContracts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [alertsTotal, setAlertsTotal] = useState(0);
+  const [selectedAlertId, setSelectedAlertId] = useState(null);
 
-  const signedContracts = useMemo(
-    () => candidats.filter((c) => c.typeCandidat === "contact_contract" && c.contratSigne),
-    [candidats]
-  );
-
-  const dynamicSignedRows = useMemo(
-    () =>
-      signedContracts.map((candidate) => {
-        const dateDebutContrat = candidate.dateDebutContrat || candidate.dateDebut || "-";
-        const dateFinContrat = candidate.dateFinContrat || candidate.dateFin || "-";
-        const dateSignature =
-          candidate.dateSignature ||
-          candidate.date_signature ||
-          candidate.signatureDate ||
-          candidate.contractSignedAt ||
-          "-";
-        return {
-          id: `cand-${candidate.id}`,
-          candidateId: candidate.id,
-          fromCandidate: true,
-          cin: candidate.cin || candidate.numeroCin || candidate.CIN || "-",
-          nomPrenom: candidate.nomComplet || candidate.nom || "-",
-          telephone: candidate.telephone || candidate.phone || candidate.tel || "-",
-          email: candidate.email || candidate.mail || candidate.adresseEmail || "-",
-          poste: candidate.poste || candidate.posteVise || candidate.fonction || "-",
-          typeContrat: candidate.typeContrat || candidate.type_contrat || "CDD",
-          dateSignature,
-          dateDebutContrat,
-          dateFinContrat,
-          statutContrat:
-            candidate.statutContrat ||
-            candidate.statut_contrat ||
-            candidate.contractStatus ||
-            candidate.statutContratLabel ||
-            "Actif",
-          joursRestants: computeDaysRemaining(dateFinContrat),
-        };
-      }),
-    [signedContracts]
-  );
-
-  const seedRowsWithCandidate = useMemo(
-    () =>
-      seedContracts.map((row) => {
-        const linked = candidats.find(
-          (candidate) =>
-            normalizeText(candidate.nomComplet) === normalizeText(row.nomPrenom) ||
-            (candidate.matricule && row.matricule && candidate.matricule === row.matricule)
-        );
-
-        return {
-          ...row,
-          candidateId: linked?.id || null,
-          joursRestants: computeDaysRemaining(row.dateFinContrat),
-        };
-      }),
-    [candidats]
-  );
-
-  const contractsData = useMemo(
-    () => [...dynamicSignedRows, ...seedRowsWithCandidate],
-    [dynamicSignedRows, seedRowsWithCandidate]
-  );
-
-  const alertes = STATIC_RENEWAL_ALERTS;
-
-  const filteredContracts = useMemo(() => {
-    const normalizedSearch = normalizeText(search);
-    if (!normalizedSearch) return contractsData;
-
-    return contractsData.filter((contract) =>
-      [
-        contract.cin,
-        contract.nomPrenom,
-        contract.telephone,
-        contract.email,
-        contract.poste,
-        contract.typeContrat,
-        contract.dateSignature,
-        contract.dateDebutContrat,
-        contract.dateFinContrat,
-        contract.statutContrat,
-      ].some((value) => normalizeText(value).includes(normalizedSearch))
-    );
-  }, [contractsData, search]);
-
-  const filteredAlertes = useMemo(() => {
-    const normalizedSearch = normalizeText(search);
-    if (!normalizedSearch) return alertes;
-
-    return alertes.filter((alert) =>
-      [
-        alert.title,
-        alert.headline,
-        alert.nomPrenom,
-        alert.matricule,
-        alert.typeContrat,
-        alert.segment,
-        alert.fonction,
-        alert.projet,
-        alert.site,
-        alert.responsable,
-        alert.statutAlerte,
-        alert.niveau,
-      ].some((value) => normalizeText(value).includes(normalizedSearch))
-    );
-  }, [alertes, search]);
+  const normalizedSearch = search.trim();
+  const activeContractsType = tab === TAB_ALERTS ? TAB_ALERTS : TAB_CONTRACTS;
 
   useEffect(() => {
     setCurrentPage(1);
   }, [rowsPerPage, search, tab]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredContracts.length / rowsPerPage));
+  useEffect(() => {
+    let ignore = false;
+    const controller = new AbortController();
+
+    if (!user) {
+      setContracts([]);
+      setLoading(false);
+      setError("");
+      return () => {
+        ignore = true;
+        controller.abort();
+      };
+    }
+
+    async function loadContracts() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const response = await fetch(
+          buildContractsUrl({
+            search: normalizedSearch,
+            type: activeContractsType,
+          }),
+          {
+            headers: buildRoleHeaders(user, {
+              "Content-Type": "application/json",
+            }),
+            signal: controller.signal,
+          }
+        );
+
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload?.ok) {
+          throw new Error(payload?.message || "Impossible de charger les contrats.");
+        }
+
+        const nextContracts = Array.isArray(payload?.contrats)
+          ? payload.contrats.map(mapContractRow)
+          : [];
+
+        if (!ignore) {
+          setContracts(nextContracts);
+        }
+      } catch (loadError) {
+        if (!ignore && loadError?.name !== "AbortError") {
+          console.error("Erreur chargement contrats:", loadError);
+          setContracts([]);
+          setError(loadError?.message || "Impossible de charger les contrats.");
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadContracts();
+
+    return () => {
+      ignore = true;
+      controller.abort();
+    };
+  }, [user, normalizedSearch, activeContractsType]);
 
   useEffect(() => {
-    if (filteredAlertes.length === 0) return;
-    if (!filteredAlertes.some((alert) => alert.id === selectedAlertId)) {
-      setSelectedAlertId(filteredAlertes[0].id);
+    let ignore = false;
+    const controller = new AbortController();
+
+    if (!user) {
+      setAlertsTotal(0);
+      return () => {
+        ignore = true;
+        controller.abort();
+      };
     }
-  }, [filteredAlertes, selectedAlertId]);
+
+    if (tab === TAB_ALERTS) {
+      setAlertsTotal(contracts.length);
+      return () => {
+        ignore = true;
+        controller.abort();
+      };
+    }
+
+    async function loadAlertsCount() {
+      try {
+        const response = await fetch(
+          buildContractsUrl({
+            search: normalizedSearch,
+            type: TAB_ALERTS,
+          }),
+          {
+            headers: buildRoleHeaders(user, {
+              "Content-Type": "application/json",
+            }),
+            signal: controller.signal,
+          }
+        );
+
+        const payload = await response.json().catch(() => null);
+        if (!response.ok || !payload?.ok) {
+          throw new Error(payload?.message || "Impossible de charger le total des alertes.");
+        }
+
+        if (!ignore) {
+          setAlertsTotal(Array.isArray(payload?.contrats) ? payload.contrats.length : 0);
+        }
+      } catch (countError) {
+        if (!ignore && countError?.name !== "AbortError") {
+          console.error("Erreur total alertes:", countError);
+          setAlertsTotal(0);
+        }
+      }
+    }
+
+    loadAlertsCount();
+
+    return () => {
+      ignore = true;
+      controller.abort();
+    };
+  }, [user, normalizedSearch, tab, contracts.length]);
+
+  const totalPages = Math.max(1, Math.ceil(contracts.length / rowsPerPage));
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -531,24 +510,45 @@ export default function ContractsPage() {
 
   const paginatedContracts = useMemo(() => {
     const startIndex = (currentPage - 1) * rowsPerPage;
-    return filteredContracts.slice(startIndex, startIndex + rowsPerPage);
-  }, [currentPage, filteredContracts, rowsPerPage]);
+    return contracts.slice(startIndex, startIndex + rowsPerPage);
+  }, [contracts, currentPage, rowsPerPage]);
 
   const paginationItems = useMemo(
     () => getCompactPagination(currentPage, totalPages),
     [currentPage, totalPages]
   );
 
-  const pageStart = filteredContracts.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1;
-  const pageEnd = Math.min(currentPage * rowsPerPage, filteredContracts.length);
+  const pageStart = contracts.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1;
+  const pageEnd = pageStart === 0 ? 0 : Math.min(currentPage * rowsPerPage, contracts.length);
+
+  const alertDetails = useMemo(() => contracts.map(buildRenewalAlert), [contracts]);
+
+  useEffect(() => {
+    if (tab !== TAB_ALERTS) return;
+
+    if (alertDetails.length === 0) {
+      if (selectedAlertId !== null) {
+        setSelectedAlertId(null);
+      }
+      return;
+    }
+
+    if (!alertDetails.some((alert) => alert.id === selectedAlertId)) {
+      setSelectedAlertId(alertDetails[0].id);
+    }
+  }, [tab, alertDetails, selectedAlertId]);
+
   const selectedAlert =
-    filteredAlertes.find((alert) => alert.id === selectedAlertId) || filteredAlertes[0] || null;
+    alertDetails.find((alert) => alert.id === selectedAlertId) || alertDetails[0] || null;
   const selectedAlertTheme = getRenewalAlertTheme(selectedAlert?.niveau);
-  const nearbyAlertes = filteredAlertes.filter((alert) => alert.id !== selectedAlert?.id).slice(0, 3);
+  const nearbyAlertes = alertDetails.filter((alert) => alert.id !== selectedAlert?.id).slice(0, 3);
 
   const openCandidateDossier = () => {
     navigate("/contracts/reception");
   };
+
+  const totalLabel = tab === TAB_ALERTS ? "alertes affichees" : "contrats affiches";
+  const summaryLabel = tab === TAB_ALERTS ? "alertes affichees" : "contrats affiches";
 
   return (
     <div className="contracts-page">
@@ -557,7 +557,7 @@ export default function ContractsPage() {
           <div className="contracts-shell__copy">
             <span className="contracts-shell__eyebrow">Administration RH</span>
             <h2>Gestion des contrats</h2>
-            <p>Liste des contrats importes et suivi de leur etat</p>
+            <p>Liste des contrats et suivi de leur etat</p>
           </div>
 
           <div className="contracts-shell__header-actions">
@@ -590,9 +590,9 @@ export default function ContractsPage() {
           <button
             type="button"
             role="tab"
-            aria-selected={tab === "liste"}
-            className={`contracts-tabs__button ${tab === "liste" ? "is-active" : ""}`}
-            onClick={() => setTab("liste")}
+            aria-selected={tab === TAB_CONTRACTS}
+            className={`contracts-tabs__button ${tab === TAB_CONTRACTS ? "is-active" : ""}`}
+            onClick={() => setTab(TAB_CONTRACTS)}
           >
             Liste des contrats
           </button>
@@ -600,148 +600,124 @@ export default function ContractsPage() {
           <button
             type="button"
             role="tab"
-            aria-selected={tab === "alertes"}
-            className={`contracts-tabs__button ${tab === "alertes" ? "is-active" : ""}`}
-            onClick={() => setTab("alertes")}
+            aria-selected={tab === TAB_ALERTS}
+            className={`contracts-tabs__button ${tab === TAB_ALERTS ? "is-active" : ""}`}
+            onClick={() => setTab(TAB_ALERTS)}
           >
             Alertes renouvellement
-            {alertes.length > 0 ? <span className="contracts-tabs__badge">{alertes.length}</span> : null}
+            {alertsTotal > 0 ? <span className="contracts-tabs__badge">{alertsTotal}</span> : null}
           </button>
         </div>
 
-        {tab === "liste" ? (
-          <>
-            <div className="contracts-shell__toolbar">
-              <div className="contracts-shell__toolbar-strip">
-                <label className="contracts-page-size">
-                  <span>Lignes</span>
-                  <select value={rowsPerPage} onChange={(event) => setRowsPerPage(Number(event.target.value))}>
-                    {PAGE_SIZE_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+        <div className="contracts-shell__toolbar">
+          <div className="contracts-shell__toolbar-strip">
+            <label className="contracts-page-size">
+              <span>Lignes</span>
+              <select value={rowsPerPage} onChange={(event) => setRowsPerPage(Number(event.target.value))}>
+                {PAGE_SIZE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-                <div className="contracts-toolbar__meta">
-                  <strong>{filteredContracts.length}</strong>
-                  <span>contrats affiches</span>
-                </div>
-
-                <div className="contracts-toolbar__meta">
-                  <strong>
-                    {currentPage} / {totalPages}
-                  </strong>
-                  <span>page courante</span>
-                </div>
-              </div>
+            <div className="contracts-toolbar__meta">
+              <strong>{contracts.length}</strong>
+              <span>{totalLabel}</span>
             </div>
 
-            <div className="contracts-table-wrap">
-              <table className="contracts-table">
-                <thead>
+            <div className="contracts-toolbar__meta">
+              <strong>
+                {currentPage} / {totalPages}
+              </strong>
+              <span>page courante</span>
+            </div>
+          </div>
+        </div>
+
+        {tab === TAB_CONTRACTS ? (
+          <div className="contracts-table-wrap">
+            <table className="contracts-table">
+              <thead>
+                <tr>
+                  <th>CIN</th>
+                  <th>Nom &amp; Pr&eacute;nom</th>
+                  <th>Genre</th>
+                  <th>Fonction</th>
+                  <th>Segment</th>
+                  <th>Projet</th>
+                  <th>Site</th>
+                  <th>Type de contrat</th>
+                  <th>Date signature</th>
+                  <th>Date d&eacute;but contrat</th>
+                  <th>Date fin contrat</th>
+                  <th>Statut contrat</th>
+                  <th>Jours restants</th>
+                  <th>Alerte</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
                   <tr>
-                    <th>CIN</th>
-                    <th>Nom &amp; Prenom</th>
-                    <th>Telephone</th>
-                    <th>Email</th>
-                    <th>Poste</th>
-                    <th>Type de contrat</th>
-                    <th>Date signature</th>
-                    <th>Date debut contrat</th>
-                    <th>Date fin contrat</th>
-                    <th>Statut contrat</th>
-                    <th>Jours restants</th>
-                    <th>Alerte</th>
-                    <th>Actions</th>
+                    <td colSpan="15" className="contracts-table__empty">
+                      Chargement des contrats...
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {paginatedContracts.length > 0 ? (
-                    paginatedContracts.map((contract) => (
-                      <tr key={contract.id}>
-                        <td className="contracts-table__cell--mono">{contract.cin || "-"}</td>
-                        <td className="contracts-table__cell--strong">{contract.nomPrenom || "-"}</td>
-                        <td className="contracts-table__cell--mono">{contract.telephone || "-"}</td>
-                        <td className="contracts-table__cell--email">{contract.email || "-"}</td>
-                        <td className="contracts-table__cell--muted">{contract.poste || "-"}</td>
-                        <td>
-                          <TypeBadge value={contract.typeContrat} />
-                        </td>
-                        <td className="contracts-table__cell--date">{formatDate(contract.dateSignature)}</td>
-                        <td className="contracts-table__cell--date">{formatDate(contract.dateDebutContrat)}</td>
-                        <td className="contracts-table__cell--date">{formatDate(contract.dateFinContrat)}</td>
-                        <td>
-                          <ContractStatusBadge contract={contract} />
-                        </td>
-                        <td>
-                          <span className={getDaysClassName(contract)}>{formatDaysRemaining(contract)}</span>
-                        </td>
-                        <td>
-                          <AlertBadge contract={contract} />
-                        </td>
-                        <td>
-                          <ActionMenu onConsult={openCandidateDossier} />
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan="13" className="contracts-table__empty">
-                        Aucun contrat ne correspond a votre recherche.
+                ) : error ? (
+                  <tr>
+                    <td colSpan="15" className="contracts-table__empty">
+                      {error}
+                    </td>
+                  </tr>
+                ) : paginatedContracts.length > 0 ? (
+                  paginatedContracts.map((contract) => (
+                    <tr key={contract.id}>
+                      <td className="contracts-table__cell--mono">{contract.cin || "-"}</td>
+                      <td className="contracts-table__cell--strong">{contract.nomPrenom || "-"}</td>
+                      <td className="contracts-table__cell--muted">{contract.genre || "-"}</td>
+                      <td className="contracts-table__cell--wrap">{contract.fonction || "-"}</td>
+                      <td className="contracts-table__cell--muted">{contract.segment || "-"}</td>
+                      <td className="contracts-table__cell--wrap">{contract.projet || "-"}</td>
+                      <td className="contracts-table__cell--muted">{contract.site || "-"}</td>
+                      <td>
+                        <TypeBadge value={contract.typeContrat} />
+                      </td>
+                      <td className="contracts-table__cell--date">{formatDate(contract.dateSignature)}</td>
+                      <td className="contracts-table__cell--date">{formatDate(contract.dateDebutContrat)}</td>
+                      <td className="contracts-table__cell--date">{formatDate(contract.dateFinContrat)}</td>
+                      <td>
+                        <ContractStatusBadge contract={contract} />
+                      </td>
+                      <td>
+                        <span className={getDaysClassName(contract)}>{formatDaysRemaining(contract)}</span>
+                      </td>
+                      <td>
+                        <AlertBadge contract={contract} />
+                      </td>
+                      <td>
+                        <ActionMenu onConsult={openCandidateDossier} />
                       </td>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <footer className="contracts-shell__footer">
-              <div className="contracts-footer__summary">
-                <span>Affichage</span>
-                <strong>
-                  {pageStart} - {pageEnd}
-                </strong>
-                <span>sur {filteredContracts.length} contrats</span>
-              </div>
-
-              <div className="contracts-pagination">
-                <PaginationButton
-                  className="contracts-pagination__button--nav"
-                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Precedent
-                </PaginationButton>
-
-                <div className="contracts-pagination__pages" aria-label="Pagination">
-                  {paginationItems.map((pageNumber) => (
-                    <PaginationButton
-                      key={pageNumber}
-                      active={pageNumber === currentPage}
-                      onClick={() => setCurrentPage(pageNumber)}
-                    >
-                      {pageNumber}
-                    </PaginationButton>
-                  ))}
-                </div>
-
-                <div className="contracts-pagination__status">Page {currentPage} sur {totalPages}</div>
-
-                <PaginationButton
-                  className="contracts-pagination__button--nav"
-                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  Suivant
-                </PaginationButton>
-              </div>
-            </footer>
-          </>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="15" className="contracts-table__empty">
+                      Aucun contrat trouv&eacute;.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <div className="contracts-alerts-view">
-            {selectedAlert ? (
+            {loading ? (
+              <div className="contracts-monitor__empty">Chargement des alertes...</div>
+            ) : error ? (
+              <div className="contracts-monitor__empty">{error}</div>
+            ) : selectedAlert ? (
               <>
                 <section className={`contracts-monitor__hero ${selectedAlertTheme.className}`}>
                   <div className="contracts-monitor__hero-copy">
@@ -778,9 +754,7 @@ export default function ContractsPage() {
 
                       <div className="contracts-monitor__tags">
                         <TypeBadge value={selectedAlert.typeContrat} />
-                        <span
-                          className={`contracts-monitor__level-badge ${selectedAlertTheme.className}`}
-                        >
+                        <span className={`contracts-monitor__level-badge ${selectedAlertTheme.className}`}>
                           {selectedAlertTheme.label}
                         </span>
                       </div>
@@ -797,7 +771,12 @@ export default function ContractsPage() {
                       </div>
                       <div>
                         <span>Jours restants</span>
-                        <strong>{formatRenewalCountdown(selectedAlert.joursRestants)}</strong>
+                        <strong>
+                          {formatRenewalCountdown(
+                            selectedAlert.joursRestants,
+                            selectedAlert.joursRestantsAffichage
+                          )}
+                        </strong>
                       </div>
                     </div>
 
@@ -831,8 +810,8 @@ export default function ContractsPage() {
 
                       <dl className="contracts-monitor__summary-grid">
                         <div>
-                          <dt>Matricule</dt>
-                          <dd>{selectedAlert.matricule}</dd>
+                          <dt>CIN</dt>
+                          <dd>{selectedAlert.cin}</dd>
                         </div>
                         <div>
                           <dt>Type contrat</dt>
@@ -911,15 +890,16 @@ export default function ContractsPage() {
                                   <span>{alert.typeContrat}</span>
                                 </div>
                                 <span className={`contracts-monitor__mini-badge ${alertTheme.className}`}>
-                                  {formatRenewalCountdown(alert.joursRestants)}
+                                  {formatRenewalCountdown(
+                                    alert.joursRestants,
+                                    alert.joursRestantsAffichage
+                                  )}
                                 </span>
                               </button>
                             );
                           })
                         ) : (
-                          <div className="contracts-monitor__mini-empty">
-                            Aucune autre alerte visible pour cette recherche.
-                          </div>
+                          <div className="contracts-monitor__mini-empty">Aucune autre alerte visible.</div>
                         )}
                       </div>
                     </section>
@@ -936,7 +916,7 @@ export default function ContractsPage() {
                   </div>
 
                   <div className="contracts-monitor__secondary-table" role="list">
-                    {filteredAlertes.map((alert) => {
+                    {alertDetails.map((alert) => {
                       const alertTheme = getRenewalAlertTheme(alert.niveau);
                       return (
                         <button
@@ -951,7 +931,9 @@ export default function ContractsPage() {
                           <span className="contracts-monitor__secondary-name">{alert.nomPrenom}</span>
                           <span>{alert.typeContrat}</span>
                           <span>{formatDate(alert.dateFinContrat)}</span>
-                          <span>{formatRenewalCountdown(alert.joursRestants)}</span>
+                          <span>
+                            {formatRenewalCountdown(alert.joursRestants, alert.joursRestantsAffichage)}
+                          </span>
                           <span className={`contracts-monitor__secondary-level ${alertTheme.className}`}>
                             {alertTheme.label}
                           </span>
@@ -963,12 +945,55 @@ export default function ContractsPage() {
                 </section>
               </>
             ) : (
-              <div className="contracts-monitor__empty">
-                Aucune alerte ne correspond a votre recherche.
-              </div>
+              <div className="contracts-monitor__empty">Aucun contrat trouv&eacute;.</div>
             )}
           </div>
         )}
+
+        <footer className="contracts-shell__footer">
+          <div className="contracts-footer__summary">
+            <span>Affichage</span>
+            <strong>
+              {pageStart} - {pageEnd}
+            </strong>
+            <span>sur {contracts.length} {summaryLabel}</span>
+          </div>
+
+          <div className="contracts-pagination">
+            <PaginationButton
+              className="contracts-pagination__button--nav"
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={loading || currentPage === 1}
+            >
+              Precedent
+            </PaginationButton>
+
+            <div className="contracts-pagination__pages" aria-label="Pagination">
+              {paginationItems.map((pageNumber) => (
+                <PaginationButton
+                  key={pageNumber}
+                  active={pageNumber === currentPage}
+                  onClick={() => setCurrentPage(pageNumber)}
+                  disabled={loading}
+                >
+                  {pageNumber}
+                </PaginationButton>
+              ))}
+            </div>
+
+            <div className="contracts-pagination__status">
+              Page {currentPage} sur {totalPages}
+            </div>
+
+            <PaginationButton
+              className="contracts-pagination__button--nav"
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={loading || currentPage === totalPages}
+            >
+              Suivant
+            </PaginationButton>
+          </div>
+        </footer>
       </section>
     </div>
   );

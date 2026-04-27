@@ -39,6 +39,7 @@ exports.createTestEntretien = async (req, res) => {
     const fonction = String(req.body?.fonction ?? "").trim();
     const segment = String(req.body?.segment ?? "").trim();
     const projet = String(req.body?.projet ?? "").trim();
+    const site = String(req.body?.site ?? "").trim();
     const resultatEntretien = normalizeResult(req.body?.resultat_entretien);
 
     if (!candidatId) {
@@ -104,6 +105,7 @@ exports.createTestEntretien = async (req, res) => {
                 .input("fonction", sql.NVarChar(255), fonction || null)
                 .input("segment", sql.NVarChar(255), segment || null)
                 .input("projet", sql.NVarChar(255), projet || null)
+                .input("site", sql.NVarChar(300), site || null)
                 .input("resultat_entretien", sql.NVarChar(50), resultatEntretien)
                 .query(`
                     UPDATE dbo.test_entretien
@@ -112,6 +114,7 @@ exports.createTestEntretien = async (req, res) => {
                         fonction = @fonction,
                         segment = @segment,
                         projet = @projet,
+                        site = @site,
                         resultat_entretien = @resultat_entretien,
                         updated_at = GETDATE(),
                         date_entretien = GETDATE()
@@ -129,6 +132,7 @@ exports.createTestEntretien = async (req, res) => {
                 .input("fonction", sql.NVarChar(255), fonction || null)
                 .input("segment", sql.NVarChar(255), segment || null)
                 .input("projet", sql.NVarChar(255), projet || null)
+                .input("site", sql.NVarChar(300), site || null)
                 .input("resultat_entretien", sql.NVarChar(50), resultatEntretien)
                 .query(`
                     INSERT INTO dbo.test_entretien
@@ -139,6 +143,7 @@ exports.createTestEntretien = async (req, res) => {
                         fonction,
                         segment,
                         projet,
+                        site,
                         resultat_entretien,
                         date_saisie,
                         updated_at,
@@ -153,6 +158,7 @@ exports.createTestEntretien = async (req, res) => {
                         @fonction,
                         @segment,
                         @projet,
+                        @site,
                         @resultat_entretien,
                         GETDATE(),
                         GETDATE(),
@@ -281,6 +287,7 @@ exports.getLatestTestEntretienByCandidate = async (req, res) => {
                     fonction,
                     segment,
                     projet,
+                    site,
                     resultat_entretien,
                     date_saisie,
                     updated_at,
@@ -325,6 +332,7 @@ exports.getTestEntretienHistoryByCandidate = async (req, res) => {
                     fonction,
                     segment,
                     projet,
+                    site,
                     resultat_entretien,
                     date_saisie,
                     updated_at,

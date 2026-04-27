@@ -98,7 +98,7 @@ const initialCandidats = [
     etablissement: "ISET Sfax",
     posteVise: "Technicien controle",
     missionId: "M002",
-    statut: "Reintegre",
+    statut: "Nouveau",
     notes: "",
   },
   {
@@ -161,7 +161,7 @@ const initialCandidats = [
     etablissement: "ENIT Tunis",
     posteVise: "Technicien maintenance",
     missionId: "M001",
-    statut: "Reintegre",
+    statut: "Nouveau",
     notes: "Experience 2 ans",
   },
 ];

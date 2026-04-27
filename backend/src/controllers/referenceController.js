@@ -32,10 +32,18 @@ exports.getEntretienOptions = async (_req, res) => {
             ORDER BY nom;
         `);
 
+        const sitesResult = await pool.request().query(`
+            SELECT nom
+            FROM dbo.ref_sites
+            WHERE actif = 1
+            ORDER BY nom;
+        `);
+
         return res.json({
             fonctions: mapNames(fonctionsResult),
             segments: mapNames(segmentsResult),
             projets: mapNames(projetsResult),
+            sites: mapNames(sitesResult),
         });
     } catch (err) {
         console.error("Erreur getEntretienOptions:", err);

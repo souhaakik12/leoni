@@ -1,6 +1,7 @@
 ﻿const express = require("express");
 const sql = require("mssql");
 const cors = require("cors");
+const contratRoutes = require("./src/routes/contratRoutes");
 const candidatRoutes = require("./src/routes/candidatRoutes");
 const documentContratRoutes = require("./src/routes/documentContratRoutes");
 const seanceContratRoutes = require("./src/routes/seanceContratRoutes");
@@ -29,6 +30,7 @@ app.use("/api/candidats", (req, _res, next) => {
 console.log("[BOOT] montage des routes /api/candidats");
 app.use("/api/candidats", candidatRoutes);
 app.use("/api/candidats", documentContratRoutes);
+app.use("/api/contrats", contratRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/utilisateurs", utilisateurRoutes);
 app.use("/api/seances-contrat", requireRole(CONTRACT_ALLOWED_ROLES));

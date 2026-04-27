@@ -71,6 +71,7 @@ function getInitialForm(candidat) {
     fonction: candidat?.fonction || "",
     segment: candidat?.segment || "",
     projet: candidat?.projet || "",
+    site: candidat?.site || "",
     entretienResult: candidat?.entretienResult || ENTRETIEN_ATTENTE,
   };
 }
@@ -105,6 +106,7 @@ function getInterviewFormFromInterview(interview, candidat) {
     fonction: interview?.fonction || "",
     segment: interview?.segment || "",
     projet: interview?.projet || "",
+    site: interview?.site || "",
     entretienResult: normalizeInterviewResult(interview?.resultat_entretien || candidat?.entretienResult),
   };
 }
@@ -174,6 +176,7 @@ export default function CandidatDossierPage() {
   const [fonctionOptions, setFonctionOptions] = useState([]);
   const [segmentOptions, setSegmentOptions] = useState([]);
   const [projetOptions, setProjetOptions] = useState([]);
+  const [siteOptions, setSiteOptions] = useState([]);
   const fromContracts = search.includes("from=contracts") || user?.role === "contrats";
   const backPath = fromContracts ? "/contracts/reception" : "/candidats/test";
 
@@ -191,6 +194,7 @@ export default function CandidatDossierPage() {
   const fonctionSelectOptions = buildSelectOptions(fonctionOptions, form.fonction);
   const segmentSelectOptions = buildSelectOptions(segmentOptions, form.segment);
   const projetSelectOptions = buildSelectOptions(projetOptions, form.projet);
+  const siteSelectOptions = buildSelectOptions(siteOptions, form.site);
 
   useEffect(() => {
     let cancelled = false;
@@ -208,6 +212,7 @@ export default function CandidatDossierPage() {
           setFonctionOptions(Array.isArray(payload?.fonctions) ? payload.fonctions : []);
           setSegmentOptions(Array.isArray(payload?.segments) ? payload.segments : []);
           setProjetOptions(Array.isArray(payload?.projets) ? payload.projets : []);
+          setSiteOptions(Array.isArray(payload?.sites) ? payload.sites : []);
         }
       } catch (error) {
         console.error(error);
@@ -215,6 +220,7 @@ export default function CandidatDossierPage() {
           setFonctionOptions([]);
           setSegmentOptions([]);
           setProjetOptions([]);
+          setSiteOptions([]);
         }
       }
     }
@@ -451,6 +457,7 @@ export default function CandidatDossierPage() {
           fonction: form.fonction,
           segment: form.segment,
           projet: form.projet,
+          site: form.site,
           resultat_entretien: form.entretienResult,
         }),
       });
@@ -467,6 +474,7 @@ export default function CandidatDossierPage() {
         fonction: form.fonction,
         segment: form.segment,
         projet: form.projet,
+        site: form.site,
         entretienResult: normalizeInterviewResult(payload?.interview?.resultat_entretien || form.entretienResult),
         etape: payload?.candidat?.etape || candidat.etape,
         statut: payload?.candidat?.statut || candidat.statut,
@@ -642,6 +650,21 @@ export default function CandidatDossierPage() {
               </select>
             </div>
             <div>
+              <label>Site</label>
+              <select
+                value={form.site}
+                onChange={(e) => setForm((p) => ({ ...p, site: e.target.value }))}
+                disabled={isInterviewFormDisabled}
+              >
+                <option value="">Sélectionner un site</option>
+                {siteSelectOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label>Resultat entretien</label>
               <select
                 value={form.entretienResult}
@@ -665,6 +688,7 @@ export default function CandidatDossierPage() {
               </div>
               <p>Test: {latestInterview.test_effectue || "-"}</p>
               <p>Intervieweur: {latestInterview.intervieweur || "-"}</p>
+              <p>Site: {latestInterview.site || "-"}</p>
               <p>Date: {formatInterviewDate(latestInterview.date_entretien || latestInterview.updated_at || latestInterview.date_saisie)}</p>
             </div>
           )}
@@ -707,7 +731,7 @@ export default function CandidatDossierPage() {
                     <div className="interview-history-main">
                       <strong>{interview.test_effectue || "Test non renseigne"}</strong>
                       <span>
-                        Intervieweur: {interview.intervieweur || "-"} | Fonction: {interview.fonction || "-"}
+                        Intervieweur: {interview.intervieweur || "-"} | Fonction: {interview.fonction || "-"} | Site: {interview.site || "-"}
                       </span>
                     </div>
                     <div className="interview-history-meta">

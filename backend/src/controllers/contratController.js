@@ -1,0 +1,27 @@
+const contratModel = require("../models/contratModel");
+
+function handleError(res, error, fallbackMessage) {
+    const status = Number.isInteger(error?.status) ? error.status : 500;
+    const message = error?.message || fallbackMessage;
+    console.error("Erreur contratController:", error);
+    return res.status(status).json({
+        ok: false,
+        message,
+    });
+}
+
+exports.getContrats = async (req, res) => {
+    try {
+        const contrats = await contratModel.getContratsFront({
+            type: req.query.type,
+            search: req.query.search,
+        });
+
+        return res.json({
+            ok: true,
+            contrats,
+        });
+    } catch (error) {
+        return handleError(res, error, "Impossible de charger les contrats.");
+    }
+};

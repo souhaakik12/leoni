@@ -4,17 +4,13 @@ import { useRecrutements } from "../context/RecrutementsContext.jsx";
 import "./CandidatsPage.css";
 
 const STATUS_NOUVEAU = "Nouveau";
-const STATUS_REINTEGRE = "R\u00E9int\u00E9gr\u00E9";
 const STATUS_ACCEPTE = "Accepte";
 const STATUS_REFUSE = "Refuse";
-const AVIS_OK = "OK";
-const AVIS_REFUSE = "REFUSE";
-const AVIS_ATTENTE = "PAS_DE_REPONSE";
 const ENTRETIEN_OK = "OK";
 const ENTRETIEN_NOK = "NOK";
 const ENTRETIEN_ATTENTE = "EN_ATTENTE";
 const TYPE_CANDIDAT_CONTRACT_SESSION = "contract_session_pending";
-const statutChoices = ["Tous", STATUS_NOUVEAU, STATUS_REINTEGRE, STATUS_ACCEPTE, STATUS_REFUSE];
+const statutChoices = ["Tous", STATUS_NOUVEAU, STATUS_ACCEPTE, STATUS_REFUSE];
 const ALLOWED_GENRES = ["Femme", "Homme"];
 
 const candidateTypes = [
@@ -36,29 +32,18 @@ const candidateTypes = [
     badgeBg: "#e4f3fb",
     badgeColor: "#1c759f",
   },
-  {
-    id: "reintegrated_pending",
-    short: "Reintegre",
-    title: "Reintegre - attente juridique",
-    desc: "Candidat reintegre en attente de l'avis juridique avant signature contrat.",
-    headerClass: "reintegre",
-    badgeBg: "#dff1ea",
-    badgeColor: "#1c7a56",
-  },
 ];
 
 const typeMap = Object.fromEntries(candidateTypes.map((type) => [type.id, type]));
 const typeToRoute = {
   candidat: "candidat",
   test_passed: "test",
-  reintegrated_pending: "reintegres",
 };
 const routeToType = Object.fromEntries(
   Object.entries(typeToRoute).map(([typeId, routeKey]) => [routeKey, typeId])
 );
 const statutColors = {
   [STATUS_NOUVEAU]: { bg: "#e8f2fa", color: "#1f6e9f" },
-  [STATUS_REINTEGRE]: { bg: "#dff1ea", color: "#1c7a56" },
   [STATUS_ACCEPTE]: { bg: "#def4e9", color: "#1f885c" },
   [STATUS_REFUSE]: { bg: "#fdecec", color: "#bf3f3f" },
 };
@@ -117,9 +102,6 @@ function inferCandidateType(candidat) {
   if (candidat.typeCandidat === "contact_contract") return "contact_contract";
   if (typeMap[candidat.typeCandidat]) return candidat.typeCandidat;
   if (candidat.entretienResult === ENTRETIEN_OK) return "contact_contract";
-  if ([STATUS_REINTEGRE, STATUS_ACCEPTE, STATUS_REFUSE].includes(candidat.statut)) {
-    return "reintegrated_pending";
-  }
   return "candidat";
 }
 
@@ -130,27 +112,22 @@ function normalizeBeforeSave(candidate) {
     next.entretienResult = ENTRETIEN_ATTENTE;
   }
 
+  const normalizedEtape = norm(next.etape);
+  const normalizedStatut = norm(next.statut);
+
+  if (normalizedEtape === "reintegration") {
+    next.etape = "CANDIDAT";
+  }
+  if (normalizedStatut.startsWith("reintegr")) {
+    next.statut = STATUS_NOUVEAU;
+  }
+
   if (next.typeCandidat === "contact_contract") {
     next.entretienResult = ENTRETIEN_OK;
     next.statut = STATUS_ACCEPTE;
     next.documentsContrat = next.documentsContrat || {};
     if (typeof next.contratSigne !== "boolean") next.contratSigne = false;
     if (typeof next.contratValide !== "boolean") next.contratValide = false;
-  }
-
-  if (next.typeCandidat === "reintegrated_pending") {
-    if (![STATUS_REINTEGRE, STATUS_ACCEPTE, STATUS_REFUSE].includes(next.statut)) {
-      next.statut = STATUS_REINTEGRE;
-    }
-    if (![AVIS_OK, AVIS_REFUSE, AVIS_ATTENTE].includes(next.avisJuridique)) {
-      next.avisJuridique = AVIS_ATTENTE;
-    }
-  } else if (
-    next.typeCandidat !== "contact_contract" &&
-    [STATUS_REINTEGRE, STATUS_ACCEPTE, STATUS_REFUSE].includes(next.statut)
-  ) {
-    next.statut = STATUS_NOUVEAU;
-    next.avisJuridique = "";
   }
 
   next.canalEntree = normalizeCanalEntree(next.canalEntree);
@@ -162,19 +139,6 @@ function norm(value) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
-}
-
-function addRemark(existingNotes, remark) {
-  const cleanRemark = (remark || "").trim();
-  if (!cleanRemark) return (existingNotes || "").trim();
-  const current = (existingNotes || "").trim();
-  if (!current) return cleanRemark;
-  const alreadyPresent = current
-    .split("|")
-    .map((part) => part.trim().toLowerCase())
-    .includes(cleanRemark.toLowerCase());
-  if (alreadyPresent) return current;
-  return `${current} | ${cleanRemark}`;
 }
 
 function normalizeCanalEntree(value) {
@@ -307,8 +271,6 @@ function mapApiCandidate(candidate) {
 
   if (etape === "TEST_ENTRETIEN") {
     typeCandidat = "test_passed";
-  } else if (etape === "REINTEGRATION") {
-    typeCandidat = "reintegrated_pending";
   } else if (etape === "SEANCE_INFO") {
     typeCandidat = TYPE_CANDIDAT_CONTRACT_SESSION;
   } else if (etape === "DOSSIER_CONTRAT") {
@@ -321,8 +283,6 @@ function mapApiCandidate(candidate) {
       ? "En attente seance contrat"
       : etape === "DOSSIER_CONTRAT"
       ? "EN_ATTENTE_DOSSIER"
-      : typeCandidat === "reintegrated_pending"
-      ? STATUS_REINTEGRE
       : STATUS_NOUVEAU);
 
   const entretienResult = etape === "SEANCE_INFO" || etape === "DOSSIER_CONTRAT" ? ENTRETIEN_OK : ENTRETIEN_ATTENTE;
@@ -346,7 +306,6 @@ function mapApiCandidate(candidate) {
     statut,
     email: "",
     gouvernoratResidence: "",
-    avisJuridique: "",
     notes: "",
     entretienResult,
     documentsContrat: {},
@@ -423,7 +382,6 @@ export default function CandidatsPage() {
           c.gouvernoratResidence,
           c.niveauEtudes,
           c.posteVise,
-          c.avisJuridique,
           c.statut,
           c.entretienResult,
           c.notes,
@@ -514,38 +472,6 @@ export default function CandidatsPage() {
     if (typeof refreshCandidatsFromApi === "function") {
       await refreshCandidatsFromApi();
     }
-  };
-
-  const setLegalDecision = (candidate, decision) => {
-    if (decision === AVIS_OK) {
-      const next = normalizeBeforeSave({
-        ...candidate,
-        typeCandidat: "test_passed",
-        statut: STATUS_NOUVEAU,
-        avisJuridique: AVIS_OK,
-        entretienResult: ENTRETIEN_ATTENTE,
-        notes: addRemark(candidate.notes, "Avis juridique OK - Reintegre"),
-        contratSigne: false,
-        contratValide: false,
-      });
-      updateCandidat(next);
-      pushToast(`Avis juridique OK: ${candidate.nomComplet} passe vers l'etape Test.`);
-      return;
-    }
-
-    const nextStatut = decision === AVIS_REFUSE ? STATUS_REFUSE : STATUS_REINTEGRE;
-    const next = normalizeBeforeSave({
-      ...candidate,
-      typeCandidat: "reintegrated_pending",
-      statut: nextStatut,
-      avisJuridique: decision,
-    });
-    updateCandidat(next);
-    const msg =
-      decision === AVIS_REFUSE
-        ? `Avis juridique refuse: ${candidate.nomComplet} refuse.`
-        : `Avis juridique en attente: ${candidate.nomComplet} (pas de reponse).`;
-    pushToast(msg);
   };
 
  const setEntretienResult = async (candidate, result) => {
@@ -1046,12 +972,7 @@ if (!response.ok) {
                 const status = statutColors[c.statut] || statutColors[STATUS_NOUVEAU];
                 const tel = phoneHref(c.telephone);
                 const mail = c.email ? `mailto:${c.email}` : "";
-                const avisValue = c.avisJuridique || AVIS_ATTENTE;
-                const avisLabel =
-                  avisValue === AVIS_OK ? "OK" : avisValue === AVIS_REFUSE ? "Refuse" : "Pas de reponse";
-                const avisClass = avisValue === AVIS_OK ? "ok" : avisValue === AVIS_REFUSE ? "ko" : "wait";
                 const entretien = getEntretienMeta(c.entretienResult);
-                const isLegalOkRemark = norm(c.notes).includes("avis juridique ok");
                 const isEditing = currentTypeId === "test_passed" && editCandidateId === c.id;
                 return (
                   <article key={c.id} className="cand-card">
@@ -1073,9 +994,6 @@ if (!response.ok) {
                       <span style={{ background: status.bg, color: status.color }}>{c.statut}</span>
                       {currentTypeId === "test_passed" && (
                         <span className={`interview-badge ${entretien.className}`}>{entretien.label}</span>
-                      )}
-                      {currentTypeId === "reintegrated_pending" && (
-                        <span className={`legal-badge ${avisClass}`}>Avis juridique: {avisLabel}</span>
                       )}
                     </div>
 
@@ -1113,7 +1031,7 @@ if (!response.ok) {
                         <strong>{c.telephone || "-"}</strong>
                       </div>
                       {c.notes && (
-                        <div className={`cand-remark ${isLegalOkRemark ? "legal-ok" : ""}`}>
+                        <div className="cand-remark">
                           <label>Remarque</label>
                           <strong>{c.notes}</strong>
                         </div>
@@ -1145,20 +1063,6 @@ if (!response.ok) {
                           onClick={() => setEntretienResult(c, ENTRETIEN_NOK)}
                         >
                           Entretien NOK
-                        </button>
-                      </div>
-                    )}
-
-                    {currentTypeId === "reintegrated_pending" && (
-                      <div className="cand-legal-actions">
-                        <button className="legal-accept" onClick={() => setLegalDecision(c, AVIS_OK)}>
-                          Avis juridique OK - Accepter
-                        </button>
-                        <button className="legal-reject" onClick={() => setLegalDecision(c, AVIS_REFUSE)}>
-                          Refuser
-                        </button>
-                        <button className="legal-pending" onClick={() => setLegalDecision(c, AVIS_ATTENTE)}>
-                          Pas de reponse
                         </button>
                       </div>
                     )}

@@ -2,7 +2,6 @@ const sql = require("mssql");
 const config = require("../../config");
 const candidatModel = require("../models/candidatModel");
 const ALLOWED_GENRES = ["Femme", "Homme"];
-
 function readTrimmed(body, ...keys) {
     for (const key of keys) {
         const value = body?.[key];
@@ -12,6 +11,15 @@ function readTrimmed(body, ...keys) {
     }
 
     return "";
+}
+
+function getDuplicateCinMessage() {
+    return "Ce CIN existe d\u00e9j\u00e0. Le candidat est d\u00e9j\u00e0 enregistr\u00e9.";
+}
+
+function isDuplicateCinError(err) {
+    const errorNumber = Number(err?.originalError?.info?.number || err?.number || 0);
+    return errorNumber === 2601 || errorNumber === 2627;
 }
 
 exports.listerCandidats = async (_req, res) => {
@@ -65,8 +73,6 @@ exports.listerCandidats = async (_req, res) => {
 
 exports.createCandidat = async (req, res) => {
     try {
-        console.log("BODY CANDIDAT =", req.body);
-
         const nom = readTrimmed(req.body, "nom");
         const cin = readTrimmed(req.body, "cin");
         const telephone = readTrimmed(req.body, "telephone");
@@ -102,6 +108,11 @@ exports.createCandidat = async (req, res) => {
             });
         }
 
+        const existingCandidat = await candidatModel.findCandidatByCin(cin);
+        if (existingCandidat) {
+            return res.status(409).json({ message: getDuplicateCinMessage() });
+        }
+
         const candidat = await candidatModel.createCandidat({
             nom,
             cin,
@@ -118,6 +129,9 @@ exports.createCandidat = async (req, res) => {
             candidat,
         });
     } catch (err) {
+        if (isDuplicateCinError(err)) {
+            return res.status(409).json({ message: getDuplicateCinMessage() });
+        }
         console.error(err);
         res.status(500).json({ message: err.message || "Ajout candidat impossible." });
     }

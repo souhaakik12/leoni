@@ -180,10 +180,6 @@
   background: linear-gradient(120deg, #f4fbff, #eaf4fc);
 }
 
-.cand-type-card.reintegre {
-  background: linear-gradient(120deg, #f4fbf8, #ebf7f2);
-}
-
 .cand-type-card.contact {
   background: linear-gradient(120deg, #f9f4ff, #f0e9ff);
 }
@@ -347,10 +343,6 @@
 
 .cand-lane-head.test {
   background: linear-gradient(120deg, #3388b8, #23739f);
-}
-
-.cand-lane-head.reintegre {
-  background: linear-gradient(120deg, #2d7f6a, #216c58);
 }
 
 .cand-lane-head.contact {

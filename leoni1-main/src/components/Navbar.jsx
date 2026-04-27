@@ -14,10 +14,6 @@ const pageTitles = {
     title: "Candidats - Test",
     sub: "Entretien candidat: resultat OK ou NOK",
   },
-  "/candidats/reintegres": {
-    title: "Candidats - Reintegres",
-    sub: "En attente de l'avis juridique avant signature contrat",
-  },
   "/candidats/test/dossier": {
     title: "Dossier Candidat",
     sub: "Test, entretien et documents du candidat",

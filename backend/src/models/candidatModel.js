@@ -6,6 +6,19 @@ const ETAPE_CANDIDAT = "CANDIDAT";
 const STATUT_NOUVEAU = "Nouveau";
 const TYPE_CANDIDATURE = "NOUVEAU";
 
+async function findCandidatByCin(cin) {
+    const pool = await sql.connect(config);
+    const result = await pool.request()
+        .input("cin", sql.VarChar, cin)
+        .query(`
+            SELECT TOP 1 id, cin
+            FROM dbo.candidats
+            WHERE cin = @cin;
+        `);
+
+    return result.recordset?.[0] || null;
+}
+
 async function getCandidateSchema(pool) {
     const schemaResult = await pool.request().query(`
         SELECT
@@ -162,6 +175,7 @@ module.exports = {
     createCandidat,
     updateCandidat,
     deleteCandidat,
+    findCandidatByCin,
     CANAL_CANDIDAT,
     ETAPE_CANDIDAT,
     STATUT_NOUVEAU,
