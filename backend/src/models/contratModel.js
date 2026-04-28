@@ -13,11 +13,6 @@ function normalizeSearch(value) {
     return String(value ?? "").trim();
 }
 
-function normalizeContratType(value) {
-    const normalizedType = String(value ?? "").trim().toLowerCase();
-    return normalizedType === "alertes" ? "alertes" : "liste";
-}
-
 function applySearchFilter(request, search) {
     const clauses = [];
 
@@ -70,56 +65,12 @@ function buildListeContratsQuery(request, search) {
     `;
 }
 
-function buildAlertesContratsQuery(request, search) {
-    const searchClause = applySearchFilter(request, search);
-    const whereParts = [
-        `ISNULL(v.alerte, N'') COLLATE Latin1_General_CI_AI IN (N'Expir\u00e9', N'Proche expiration')`,
-    ];
-
-    if (searchClause) {
-        whereParts.push(searchClause);
-    }
-
-    return `
-        SELECT TOP 100
-            id_contrat,
-            cin,
-            nom_prenom,
-            genre,
-            fonction,
-            segment,
-            projet,
-            site,
-            type_contrat,
-            date_signature,
-            date_debut_contrat,
-            date_fin_contrat,
-            statut_contrat,
-            jours_restants,
-            jours_restants_affichage,
-            alerte
-        FROM dbo.vw_contrats_front v
-        WHERE ${whereParts.join(" AND ")}
-        ORDER BY
-            CASE
-                WHEN ISNULL(v.alerte, N'') COLLATE Latin1_General_CI_AI = N'Proche expiration' THEN 1
-                WHEN ISNULL(v.alerte, N'') COLLATE Latin1_General_CI_AI = N'Expir\u00e9' THEN 2
-                ELSE 3
-            END,
-            v.date_fin_contrat ASC;
-    `;
-}
-
-async function getContratsFront({ type, search }) {
-    const normalizedType = normalizeContratType(type);
+async function getContratsFront({ search }) {
     const normalizedSearch = normalizeSearch(search);
 
     const pool = await sql.connect(config);
     const request = pool.request();
-    const query =
-        normalizedType === "alertes"
-            ? buildAlertesContratsQuery(request, normalizedSearch)
-            : buildListeContratsQuery(request, normalizedSearch);
+    const query = buildListeContratsQuery(request, normalizedSearch);
     const result = await request.query(query);
 
     return result.recordset || [];

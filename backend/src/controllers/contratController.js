@@ -13,7 +13,6 @@ function handleError(res, error, fallbackMessage) {
 exports.getContrats = async (req, res) => {
     try {
         const contrats = await contratModel.getContratsFront({
-            type: req.query.type,
             search: req.query.search,
         });
 

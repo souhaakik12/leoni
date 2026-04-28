@@ -290,10 +290,8 @@ function buildRenewalAlert(contract) {
   };
 }
 
-function buildContractsUrl({ search, type }) {
+function buildContractsUrl({ search }) {
   const params = new URLSearchParams();
-
-  params.set("type", type === TAB_ALERTS ? TAB_ALERTS : TAB_CONTRACTS);
 
   if (search) {
     params.set("search", search);
@@ -343,13 +341,18 @@ function AlertBadge({ contract }) {
   return <span className={`contracts-badge is-alert-${alertState.tone}`}>{alertState.label}</span>;
 }
 
-function ActionMenu({ onConsult }) {
+function ActionMenu({ onConsult, alertMode = false }) {
   return (
-    <div className="contracts-table__actions">
+    <div className={`contracts-table__actions ${alertMode ? "is-alerts" : ""}`.trim()}>
       <button type="button" className="contracts-action contracts-action--inline-primary" onClick={onConsult}>
         Consulter
       </button>
-      <button type="button" className="contracts-action contracts-action--inline-secondary">
+      <button
+        type="button"
+        className={`contracts-action ${
+          alertMode ? "contracts-action--inline-alert" : "contracts-action--inline-secondary"
+        }`}
+      >
         Renouveler
       </button>
     </div>
@@ -366,11 +369,8 @@ export default function ContractsPage() {
   const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [alertsTotal, setAlertsTotal] = useState(0);
-  const [selectedAlertId, setSelectedAlertId] = useState(null);
 
   const normalizedSearch = search.trim();
-  const activeContractsType = tab === TAB_ALERTS ? TAB_ALERTS : TAB_CONTRACTS;
 
   useEffect(() => {
     setCurrentPage(1);
@@ -398,7 +398,6 @@ export default function ContractsPage() {
         const response = await fetch(
           buildContractsUrl({
             search: normalizedSearch,
-            type: activeContractsType,
           }),
           {
             headers: buildRoleHeaders(user, {
@@ -439,68 +438,21 @@ export default function ContractsPage() {
       ignore = true;
       controller.abort();
     };
-  }, [user, normalizedSearch, activeContractsType]);
+  }, [user, normalizedSearch]);
 
-  useEffect(() => {
-    let ignore = false;
-    const controller = new AbortController();
+  const alertContracts = useMemo(
+    () =>
+      contracts.filter((contract) => {
+        const normalizedAlert = normalizeText(contract.alerte);
+        return normalizedAlert === "expire" || normalizedAlert === "proche expiration";
+      }),
+    [contracts]
+  );
 
-    if (!user) {
-      setAlertsTotal(0);
-      return () => {
-        ignore = true;
-        controller.abort();
-      };
-    }
+  const displayedContracts = tab === TAB_ALERTS ? alertContracts : contracts;
+  const alertsTotal = alertContracts.length;
 
-    if (tab === TAB_ALERTS) {
-      setAlertsTotal(contracts.length);
-      return () => {
-        ignore = true;
-        controller.abort();
-      };
-    }
-
-    async function loadAlertsCount() {
-      try {
-        const response = await fetch(
-          buildContractsUrl({
-            search: normalizedSearch,
-            type: TAB_ALERTS,
-          }),
-          {
-            headers: buildRoleHeaders(user, {
-              "Content-Type": "application/json",
-            }),
-            signal: controller.signal,
-          }
-        );
-
-        const payload = await response.json().catch(() => null);
-        if (!response.ok || !payload?.ok) {
-          throw new Error(payload?.message || "Impossible de charger le total des alertes.");
-        }
-
-        if (!ignore) {
-          setAlertsTotal(Array.isArray(payload?.contrats) ? payload.contrats.length : 0);
-        }
-      } catch (countError) {
-        if (!ignore && countError?.name !== "AbortError") {
-          console.error("Erreur total alertes:", countError);
-          setAlertsTotal(0);
-        }
-      }
-    }
-
-    loadAlertsCount();
-
-    return () => {
-      ignore = true;
-      controller.abort();
-    };
-  }, [user, normalizedSearch, tab, contracts.length]);
-
-  const totalPages = Math.max(1, Math.ceil(contracts.length / rowsPerPage));
+  const totalPages = Math.max(1, Math.ceil(displayedContracts.length / rowsPerPage));
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -510,38 +462,16 @@ export default function ContractsPage() {
 
   const paginatedContracts = useMemo(() => {
     const startIndex = (currentPage - 1) * rowsPerPage;
-    return contracts.slice(startIndex, startIndex + rowsPerPage);
-  }, [contracts, currentPage, rowsPerPage]);
+    return displayedContracts.slice(startIndex, startIndex + rowsPerPage);
+  }, [displayedContracts, currentPage, rowsPerPage]);
 
   const paginationItems = useMemo(
     () => getCompactPagination(currentPage, totalPages),
     [currentPage, totalPages]
   );
 
-  const pageStart = contracts.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1;
-  const pageEnd = pageStart === 0 ? 0 : Math.min(currentPage * rowsPerPage, contracts.length);
-
-  const alertDetails = useMemo(() => contracts.map(buildRenewalAlert), [contracts]);
-
-  useEffect(() => {
-    if (tab !== TAB_ALERTS) return;
-
-    if (alertDetails.length === 0) {
-      if (selectedAlertId !== null) {
-        setSelectedAlertId(null);
-      }
-      return;
-    }
-
-    if (!alertDetails.some((alert) => alert.id === selectedAlertId)) {
-      setSelectedAlertId(alertDetails[0].id);
-    }
-  }, [tab, alertDetails, selectedAlertId]);
-
-  const selectedAlert =
-    alertDetails.find((alert) => alert.id === selectedAlertId) || alertDetails[0] || null;
-  const selectedAlertTheme = getRenewalAlertTheme(selectedAlert?.niveau);
-  const nearbyAlertes = alertDetails.filter((alert) => alert.id !== selectedAlert?.id).slice(0, 3);
+  const pageStart = displayedContracts.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1;
+  const pageEnd = pageStart === 0 ? 0 : Math.min(currentPage * rowsPerPage, displayedContracts.length);
 
   const openCandidateDossier = () => {
     navigate("/contracts/reception");
@@ -623,7 +553,7 @@ export default function ContractsPage() {
             </label>
 
             <div className="contracts-toolbar__meta">
-              <strong>{contracts.length}</strong>
+              <strong>{displayedContracts.length}</strong>
               <span>{totalLabel}</span>
             </div>
 
@@ -713,240 +643,102 @@ export default function ContractsPage() {
           </div>
         ) : (
           <div className="contracts-alerts-view">
-            {loading ? (
-              <div className="contracts-monitor__empty">Chargement des alertes...</div>
-            ) : error ? (
-              <div className="contracts-monitor__empty">{error}</div>
-            ) : selectedAlert ? (
-              <>
-                <section className={`contracts-monitor__hero ${selectedAlertTheme.className}`}>
-                  <div className="contracts-monitor__hero-copy">
-                    <span className="contracts-monitor__hero-kicker">{selectedAlertTheme.label}</span>
-                    <h3>{selectedAlert.title}</h3>
-                    <p>{selectedAlert.headline}</p>
-                  </div>
+            <header className="contracts-alerts-header">
+              <div className="contracts-alerts-header__content">
+                <span className="contracts-alerts-header__icon" aria-hidden="true">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                </span>
 
-                  <div className="contracts-monitor__hero-actions">
-                    <button
-                      type="button"
-                      className="contracts-action contracts-action--monitor-primary"
-                      onClick={openCandidateDossier}
-                    >
-                      Traiter
-                    </button>
-                    <button type="button" className="contracts-action contracts-action--monitor-secondary">
-                      Reporter
-                    </button>
-                    <button type="button" className="contracts-action contracts-action--monitor-ghost">
-                      Voir historique
-                    </button>
-                  </div>
-                </section>
-
-                <div className="contracts-monitor__layout">
-                  <section className="contracts-monitor__main">
-                    <header className="contracts-monitor__main-header">
-                      <div>
-                        <span className="contracts-monitor__section-label">Alerte active</span>
-                        <h4>{selectedAlert.nomPrenom}</h4>
-                        <p>{selectedAlert.description}</p>
-                      </div>
-
-                      <div className="contracts-monitor__tags">
-                        <TypeBadge value={selectedAlert.typeContrat} />
-                        <span className={`contracts-monitor__level-badge ${selectedAlertTheme.className}`}>
-                          {selectedAlertTheme.label}
-                        </span>
-                      </div>
-                    </header>
-
-                    <div className="contracts-monitor__facts">
-                      <div>
-                        <span>Type contrat</span>
-                        <strong>{selectedAlert.typeContrat}</strong>
-                      </div>
-                      <div>
-                        <span>Date fin contrat</span>
-                        <strong>{formatDate(selectedAlert.dateFinContrat)}</strong>
-                      </div>
-                      <div>
-                        <span>Jours restants</span>
-                        <strong>
-                          {formatRenewalCountdown(
-                            selectedAlert.joursRestants,
-                            selectedAlert.joursRestantsAffichage
-                          )}
-                        </strong>
-                      </div>
-                    </div>
-
-                    <section className="contracts-monitor__section">
-                      <span>Detail</span>
-                      <p>{selectedAlert.detail}</p>
-                    </section>
-
-                    <section className="contracts-monitor__section">
-                      <span>Action recommandee</span>
-                      <p>{selectedAlert.actionRecommandee}</p>
-                    </section>
-
-                    <section className="contracts-monitor__section">
-                      <span>Suivi</span>
-                      <p>{selectedAlert.suivi}</p>
-                    </section>
-                  </section>
-
-                  <aside className="contracts-monitor__aside">
-                    <section className="contracts-monitor__panel">
-                      <div className="contracts-monitor__panel-head">
-                        <div>
-                          <span className="contracts-monitor__panel-kicker">Resume</span>
-                          <h4>Informations contrat</h4>
-                        </div>
-                        <span className={`contracts-monitor__status-pill ${selectedAlertTheme.className}`}>
-                          {selectedAlert.statutAlerte}
-                        </span>
-                      </div>
-
-                      <dl className="contracts-monitor__summary-grid">
-                        <div>
-                          <dt>CIN</dt>
-                          <dd>{selectedAlert.cin}</dd>
-                        </div>
-                        <div>
-                          <dt>Type contrat</dt>
-                          <dd>{selectedAlert.typeContrat}</dd>
-                        </div>
-                        <div>
-                          <dt>Date debut</dt>
-                          <dd>{formatDate(selectedAlert.dateDebutContrat)}</dd>
-                        </div>
-                        <div>
-                          <dt>Date fin</dt>
-                          <dd>{formatDate(selectedAlert.dateFinContrat)}</dd>
-                        </div>
-                        <div>
-                          <dt>Statut alerte</dt>
-                          <dd>{selectedAlert.statutAlerte}</dd>
-                        </div>
-                        <div>
-                          <dt>Niveau</dt>
-                          <dd>{selectedAlertTheme.label}</dd>
-                        </div>
-                      </dl>
-                    </section>
-
-                    <section className="contracts-monitor__panel">
-                      <div className="contracts-monitor__panel-head">
-                        <div>
-                          <span className="contracts-monitor__panel-kicker">Indicateur</span>
-                          <h4>Criticite</h4>
-                        </div>
-                        <strong>{selectedAlert.criticite}%</strong>
-                      </div>
-
-                      <p className="contracts-monitor__indicator-copy">
-                        {selectedAlertTheme.indicatorLabel}
-                      </p>
-
-                      <div className="contracts-monitor__indicator-bar">
-                        <span
-                          className={selectedAlertTheme.className}
-                          style={{ width: `${selectedAlert.criticite}%` }}
-                        />
-                      </div>
-
-                      <ul className="contracts-monitor__timeline">
-                        {selectedAlert.timeline.map((step) => (
-                          <li key={`${selectedAlert.id}-${step.label}`} className={`is-${step.state}`}>
-                            <span className="contracts-monitor__timeline-dot" aria-hidden="true" />
-                            <span>{step.label}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-
-                    <section className="contracts-monitor__panel">
-                      <div className="contracts-monitor__panel-head">
-                        <div>
-                          <span className="contracts-monitor__panel-kicker">Surveillance</span>
-                          <h4>Alertes proches</h4>
-                        </div>
-                      </div>
-
-                      <div className="contracts-monitor__mini-list">
-                        {nearbyAlertes.length > 0 ? (
-                          nearbyAlertes.map((alert) => {
-                            const alertTheme = getRenewalAlertTheme(alert.niveau);
-                            return (
-                              <button
-                                key={alert.id}
-                                type="button"
-                                className="contracts-monitor__mini-item"
-                                onClick={() => setSelectedAlertId(alert.id)}
-                              >
-                                <div>
-                                  <strong>{alert.nomPrenom}</strong>
-                                  <span>{alert.typeContrat}</span>
-                                </div>
-                                <span className={`contracts-monitor__mini-badge ${alertTheme.className}`}>
-                                  {formatRenewalCountdown(
-                                    alert.joursRestants,
-                                    alert.joursRestantsAffichage
-                                  )}
-                                </span>
-                              </button>
-                            );
-                          })
-                        ) : (
-                          <div className="contracts-monitor__mini-empty">Aucune autre alerte visible.</div>
-                        )}
-                      </div>
-                    </section>
-                  </aside>
+                <div className="contracts-alerts-header__copy">
+                  <span className="contracts-alerts-header__eyebrow">Surveillance RH</span>
+                  <h4>Alertes de renouvellement</h4>
+                  <p>Contrats expir&eacute;s ou proches de leur date de fin.</p>
                 </div>
+              </div>
 
-                <section className="contracts-monitor__secondary">
-                  <div className="contracts-monitor__secondary-head">
-                    <div>
-                      <span className="contracts-monitor__secondary-kicker">Liste secondaire</span>
-                      <h4>Autres alertes de renouvellement</h4>
-                    </div>
-                    <p>Selectionnez une ligne pour afficher le detail principal.</p>
-                  </div>
+              <span className="contracts-alerts-header__badge">
+                {alertsTotal} {alertsTotal > 1 ? "alertes" : "alerte"}
+              </span>
+            </header>
 
-                  <div className="contracts-monitor__secondary-table" role="list">
-                    {alertDetails.map((alert) => {
-                      const alertTheme = getRenewalAlertTheme(alert.niveau);
-                      return (
-                        <button
-                          key={alert.id}
-                          type="button"
-                          role="listitem"
-                          className={`contracts-monitor__secondary-row ${
-                            alert.id === selectedAlert.id ? "is-active" : ""
-                          }`}
-                          onClick={() => setSelectedAlertId(alert.id)}
-                        >
-                          <span className="contracts-monitor__secondary-name">{alert.nomPrenom}</span>
-                          <span>{alert.typeContrat}</span>
-                          <span>{formatDate(alert.dateFinContrat)}</span>
-                          <span>
-                            {formatRenewalCountdown(alert.joursRestants, alert.joursRestantsAffichage)}
-                          </span>
-                          <span className={`contracts-monitor__secondary-level ${alertTheme.className}`}>
-                            {alertTheme.label}
-                          </span>
-                          <span className="contracts-monitor__secondary-action">Ouvrir</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-              </>
-            ) : (
-              <div className="contracts-monitor__empty">Aucun contrat trouv&eacute;.</div>
-            )}
+            <section className="contracts-monitor__secondary">
+              <div className="contracts-monitor__secondary-head">
+                <div>
+                  <span className="contracts-monitor__secondary-kicker">Contrats a surveiller</span>
+                  <h4>Alertes renouvellement</h4>
+                </div>
+                <p>Contrats expires ou proches de leur date de fin.</p>
+              </div>
+
+              <div className="contracts-table-wrap contracts-table-wrap--alerts">
+                <table className="contracts-table contracts-table--alerts">
+                  <thead>
+                    <tr>
+                      <th>CIN</th>
+                      <th>Nom &amp; Pr&eacute;nom</th>
+                      <th>Fonction</th>
+                      <th>Segment</th>
+                      <th>Projet</th>
+                      <th>Site</th>
+                      <th>Type de contrat</th>
+                      <th>Date fin contrat</th>
+                      <th>Jours restants</th>
+                      <th>Alerte</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr>
+                        <td colSpan="11" className="contracts-table__empty">
+                          Chargement des alertes...
+                        </td>
+                      </tr>
+                    ) : error ? (
+                      <tr>
+                        <td colSpan="11" className="contracts-table__empty">
+                          {error}
+                        </td>
+                      </tr>
+                    ) : paginatedContracts.length > 0 ? (
+                      paginatedContracts.map((contract) => (
+                        <tr key={contract.id}>
+                          <td className="contracts-table__cell--mono">{contract.cin || "-"}</td>
+                          <td className="contracts-table__cell--strong">{contract.nomPrenom || "-"}</td>
+                          <td className="contracts-table__cell--wrap">{contract.fonction || "-"}</td>
+                          <td className="contracts-table__cell--muted">{contract.segment || "-"}</td>
+                          <td className="contracts-table__cell--wrap">{contract.projet || "-"}</td>
+                          <td className="contracts-table__cell--muted">{contract.site || "-"}</td>
+                          <td>
+                            <TypeBadge value={contract.typeContrat} />
+                          </td>
+                          <td className="contracts-table__cell--date">{formatDate(contract.dateFinContrat)}</td>
+                          <td>
+                            <span className={getDaysClassName(contract)}>{formatDaysRemaining(contract)}</span>
+                          </td>
+                          <td>
+                            <AlertBadge contract={contract} />
+                          </td>
+                          <td>
+                            <ActionMenu onConsult={openCandidateDossier} alertMode />
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="11" className="contracts-table__empty">
+                          Aucune alerte de renouvellement pour le moment.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
         )}
 
@@ -956,7 +748,7 @@ export default function ContractsPage() {
             <strong>
               {pageStart} - {pageEnd}
             </strong>
-            <span>sur {contracts.length} {summaryLabel}</span>
+            <span>sur {displayedContracts.length} {summaryLabel}</span>
           </div>
 
           <div className="contracts-pagination">
