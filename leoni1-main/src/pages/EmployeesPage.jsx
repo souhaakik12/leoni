@@ -3,101 +3,133 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { buildRoleHeaders } from "../utils/roles.js";
 import "./EmployeesPage.css";
 
+const API_URL = "http://localhost:3000/api/utilisateurs";
+
 const emptyForm = {
   id: null,
   NomComplet: "",
   Email: "",
-  MotDePasse: "",
   Role: "recruteur",
-  AccesFoyer: 1,
+  AccesFoyer: "1",
 };
+
+const filters = [
+  { key: "all", label: "Tous" },
+  { key: "active", label: "Actifs" },
+  { key: "inactive", label: "Inactifs" },
+];
+
+const roleLabels = {
+  admin: "Admin",
+  recruteur: "Recruteur",
+  contrats: "Contrats",
+};
+
+function normalizeValue(value = "") {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function getInitials(fullName = "") {
+  return fullName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || "")
+    .join("");
+}
 
 export default function EmployeesPage() {
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
+  const [activeFilter, setActiveFilter] = useState("all");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const [form, setForm] = useState(emptyForm);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(emptyForm);
 
-  const loadUsers = async (searchValue = "") => {
+  const totalCount = users.length;
+  const activeCount = users.filter((item) => Number(item.Actif) === 1).length;
+  const inactiveCount = totalCount - activeCount;
+
+  const filteredUsers = users.filter((item) => {
+    const normalizedSearch = normalizeValue(search.trim());
+    const normalizedName = normalizeValue(item.NomComplet);
+    const normalizedEmail = normalizeValue(item.Email);
+    const normalizedRole = normalizeValue(item.Role);
+    const matchesSearch =
+      !normalizedSearch ||
+      normalizedName.includes(normalizedSearch) ||
+      normalizedEmail.includes(normalizedSearch) ||
+      normalizedRole.includes(normalizedSearch);
+
+    if (!matchesSearch) {
+      return false;
+    }
+
+    if (activeFilter === "active") {
+      return Number(item.Actif) === 1;
+    }
+
+    if (activeFilter === "inactive") {
+      return Number(item.Actif) === 0;
+    }
+
+    return true;
+  });
+
+  const loadUsers = async () => {
     setLoading(true);
     setError("");
 
     try {
-      const query = searchValue.trim() ? `?search=${encodeURIComponent(searchValue.trim())}` : "";
-      const response = await fetch(`http://localhost:3000/api/utilisateurs${query}`, {
+      const response = await fetch(API_URL, {
         headers: buildRoleHeaders(user),
       });
       const data = await response.json().catch(() => ({}));
 
-      if (!response.ok) {
-        throw new Error(data?.message || "Impossible de charger les utilisateurs");
+      if (!response.ok || data?.success === false) {
+        throw new Error(data?.message || "Impossible de charger les utilisateurs.");
       }
 
-      setUsers(data.users || []);
-    } catch (err) {
-      setError(err.message || "Impossible de charger les utilisateurs");
+      setUsers(Array.isArray(data?.users) ? data.users : []);
+    } catch (requestError) {
+      setError(requestError.message || "Impossible de charger les utilisateurs.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    if (!user) {
+      return;
+    }
+
     loadUsers();
-  }, []);
+  }, [user]);
 
   const resetForm = () => {
     setForm(emptyForm);
     setEditingId(null);
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    setSaving(true);
+  const closeModal = () => {
+    resetForm();
     setError("");
+    setIsModalOpen(false);
+  };
+
+  const openCreateModal = () => {
+    resetForm();
     setMessage("");
-
-    try {
-      const payload = {
-        NomComplet: form.NomComplet,
-        Email: form.Email,
-        MotDePasse: form.MotDePasse,
-        Role: form.Role,
-        AccesFoyer: Number(form.AccesFoyer),
-      };
-
-      const isEditing = Boolean(editingId);
-      const response = await fetch(
-        isEditing
-          ? `http://localhost:3000/api/utilisateurs/${editingId}`
-          : "http://localhost:3000/api/utilisateurs",
-        {
-          method: isEditing ? "PUT" : "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...buildRoleHeaders(user),
-          },
-          body: JSON.stringify(payload),
-        }
-      );
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data?.message || "Enregistrement impossible");
-      }
-
-      setMessage(isEditing ? "Utilisateur modifie avec succes." : "Utilisateur ajoute avec succes.");
-      resetForm();
-      await loadUsers(search);
-    } catch (err) {
-      setError(err.message || "Enregistrement impossible");
-    } finally {
-      setSaving(false);
-    }
+    setError("");
+    setIsModalOpen(true);
   };
 
   const handleEdit = (selectedUser) => {
@@ -106,12 +138,65 @@ export default function EmployeesPage() {
       id: selectedUser.Id,
       NomComplet: selectedUser.NomComplet || "",
       Email: selectedUser.Email || "",
-      MotDePasse: "",
       Role: selectedUser.Role || "recruteur",
-      AccesFoyer: Number(selectedUser.AccesFoyer ?? 0),
+      AccesFoyer: String(Number(selectedUser.AccesFoyer ?? 0)),
     });
     setMessage("");
     setError("");
+    setIsModalOpen(true);
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    setMessage("");
+
+    const payload = {
+      NomComplet: form.NomComplet.trim(),
+      Email: form.Email.trim(),
+      Role: form.Role,
+      AccesFoyer: Number(form.AccesFoyer),
+    };
+
+    if (!payload.NomComplet || !payload.Email || !payload.Role) {
+      setError("Veuillez renseigner tous les champs obligatoires.");
+      setSaving(false);
+      return;
+    }
+
+    try {
+      const isEditing = Boolean(editingId);
+      const response = await fetch(
+        isEditing ? `${API_URL}/${editingId}` : API_URL,
+        {
+          method: isEditing ? "PUT" : "POST",
+          headers: buildRoleHeaders(user, {
+            "Content-Type": "application/json",
+          }),
+          body: JSON.stringify(payload),
+        }
+      );
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || data?.success === false) {
+        throw new Error(data?.message || "Enregistrement impossible.");
+      }
+
+      setMessage(
+        data?.message ||
+          (isEditing
+            ? "Utilisateur modifie avec succes."
+            : "Utilisateur cree avec succes.")
+      );
+
+      closeModal();
+      await loadUsers();
+    } catch (requestError) {
+      setError(requestError.message || "Enregistrement impossible.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDeactivate = async (selectedUser) => {
@@ -119,170 +204,321 @@ export default function EmployeesPage() {
     setMessage("");
 
     try {
-      const response = await fetch(`http://localhost:3000/api/utilisateurs/${selectedUser.Id}`, {
+      const response = await fetch(`${API_URL}/${selectedUser.Id}`, {
         method: "DELETE",
         headers: buildRoleHeaders(user),
       });
       const data = await response.json().catch(() => ({}));
 
-      if (!response.ok) {
-        throw new Error(data?.message || "Desactivation impossible");
+      if (!response.ok || data?.success === false) {
+        throw new Error(data?.message || "Desactivation impossible.");
       }
 
+      setMessage(data?.message || `Utilisateur ${selectedUser.NomComplet} desactive.`);
       if (editingId === selectedUser.Id) {
-        resetForm();
+        closeModal();
       }
-
-      setMessage(`Utilisateur ${selectedUser.NomComplet} desactive.`);
-      await loadUsers(search);
-    } catch (err) {
-      setError(err.message || "Desactivation impossible");
+      await loadUsers();
+    } catch (requestError) {
+      setError(requestError.message || "Desactivation impossible.");
     }
   };
 
   return (
     <div className="employees-page">
       <section className="employees-hero">
-        <div>
-          <h2>Gestion des utilisateurs</h2>
-          <p>Administration des comptes, roles et acces foyer.</p>
+        <div className="employees-hero__copy">
+          <span className="employees-hero__eyebrow">Administration RH</span>
+          <h1>Equipe interne</h1>
+          <p>Collaborateurs du bureau - acces administrateur uniquement</p>
+        </div>
+
+        <button
+          type="button"
+          className="employees-button employees-button--primary"
+          onClick={openCreateModal}
+        >
+          + Ajouter un employe
+        </button>
+      </section>
+
+      {message && (
+        <div className="employees-alert employees-alert--success">{message}</div>
+      )}
+
+      {!isModalOpen && error && (
+        <div className="employees-alert employees-alert--error">{error}</div>
+      )}
+
+      <section className="employees-stats">
+        <article className="employees-stat">
+          <span className="employees-stat__label">Total</span>
+          <strong>{totalCount}</strong>
+          <p>Collaborateurs enregistres</p>
+        </article>
+
+        <article className="employees-stat">
+          <span className="employees-stat__label">Actifs</span>
+          <strong>{activeCount}</strong>
+          <p>Comptes actuellement actifs</p>
+        </article>
+
+        <article className="employees-stat">
+          <span className="employees-stat__label">Inactifs</span>
+          <strong>{inactiveCount}</strong>
+          <p>Profils desactives</p>
+        </article>
+      </section>
+
+      <section className="employees-toolbar">
+        <label className="employees-search" htmlFor="employees-search">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="M16 16L21 21" />
+          </svg>
+          <input
+            id="employees-search"
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Rechercher un nom, un email ou un role"
+          />
+        </label>
+
+        <div className="employees-filters" aria-label="Filtres utilisateurs">
+          {filters.map((filter) => (
+            <button
+              key={filter.key}
+              type="button"
+              className={`employees-filter${
+                activeFilter === filter.key ? " employees-filter--active" : ""
+              }`}
+              onClick={() => setActiveFilter(filter.key)}
+            >
+              {filter.label}
+            </button>
+          ))}
         </div>
       </section>
 
-      <div className="employees-layout">
-        <section className="employees-card">
-          <div className="employees-card__head">
-            <div>
-              <h3>Utilisateurs</h3>
-              <p>Recherche, consultation et desactivation logique.</p>
-            </div>
-            <div className="employees-search">
-              <input
-                type="text"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Rechercher par nom, email ou role"
-              />
-              <button type="button" onClick={() => loadUsers(search)}>Rechercher</button>
-            </div>
+      <section className="employees-directory">
+        <div className="employees-directory__head">
+          <div>
+            <h2>Liste des collaborateurs</h2>
+            <p>{filteredUsers.length} profil(s) affiche(s)</p>
           </div>
+        </div>
 
-          {error && <div className="employees-alert employees-alert--error">{error}</div>}
-          {message && <div className="employees-alert employees-alert--success">{message}</div>}
+        {loading ? (
+          <div className="employees-empty">
+            <h3>Chargement des utilisateurs</h3>
+            <p>Les collaborateurs sont en cours de recuperation.</p>
+          </div>
+        ) : filteredUsers.length === 0 ? (
+          <div className="employees-empty">
+            <h3>Aucun utilisateur trouve</h3>
+            <p>Essayez de modifier la recherche ou le filtre selectionne.</p>
+          </div>
+        ) : (
+          <div className="employees-grid">
+            {filteredUsers.map((item) => {
+              const isActive = Number(item.Actif) === 1;
+              const hasHomeAccess =
+                item.AccesFoyer !== undefined && item.AccesFoyer !== null;
 
-          <div className="employees-table">
-            <div className="employees-table__row employees-table__row--head">
-              <span>Nom</span>
-              <span>Email</span>
-              <span>Role</span>
-              <span>Foyer</span>
-              <span>Statut</span>
-              <span>Actions</span>
-            </div>
+              return (
+                <article key={item.Id} className="employee-card">
+                  <div className="employee-card__header">
+                    <div className="employee-card__identity">
+                      <div className="employee-avatar">
+                        {getInitials(item.NomComplet)}
+                      </div>
 
-            {loading ? (
-              <div className="employees-table__empty">Chargement des utilisateurs...</div>
-            ) : users.length === 0 ? (
-              <div className="employees-table__empty">Aucun utilisateur trouve.</div>
-            ) : (
-              users.map((item) => (
-                <div key={item.Id} className="employees-table__row">
-                  <span>{item.NomComplet}</span>
-                  <span>{item.Email}</span>
-                  <span>{item.Role}</span>
-                  <span>{Number(item.AccesFoyer) === 1 ? "Oui" : "Non"}</span>
-                  <span>{Number(item.Actif) === 1 ? "Actif" : "Inactif"}</span>
-                  <span className="employees-table__actions">
-                    <button type="button" onClick={() => handleEdit(item)}>Modifier</button>
+                      <div className="employee-card__text">
+                        <h3>{item.NomComplet}</h3>
+                        <p>{item.Email}</p>
+                      </div>
+                    </div>
+
+                    <span
+                      className={`employee-badge ${
+                        isActive
+                          ? "employee-badge--status-active"
+                          : "employee-badge--status-inactive"
+                      }`}
+                    >
+                      {isActive ? "Actif" : "Inactif"}
+                    </span>
+                  </div>
+
+                  <div className="employee-card__details">
+                    <span
+                      className={`employee-badge employee-badge--role employee-badge--role-${item.Role}`}
+                    >
+                      {roleLabels[item.Role] || item.Role}
+                    </span>
+
+                    {hasHomeAccess && (
+                      <span
+                        className={`employee-badge ${
+                          Number(item.AccesFoyer) === 1
+                            ? "employee-badge--access-yes"
+                            : "employee-badge--access-no"
+                        }`}
+                      >
+                        Acces foyer : {Number(item.AccesFoyer) === 1 ? "Oui" : "Non"}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="employee-card__actions">
                     <button
                       type="button"
-                      className="danger"
-                      onClick={() => handleDeactivate(item)}
-                      disabled={Number(item.Actif) === 0}
+                      className="employees-button employees-button--ghost"
+                      onClick={() => handleEdit(item)}
                     >
-                      Desactiver
+                      Modifier
                     </button>
-                  </span>
-                </div>
-              ))
+
+                    <button
+                      type="button"
+                      className={`employees-button ${
+                        isActive
+                          ? "employees-button--warning"
+                          : "employees-button--danger"
+                      }`}
+                      onClick={() => handleDeactivate(item)}
+                      disabled={!isActive}
+                    >
+                      {isActive ? "Desactiver" : "Inactif"}
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {isModalOpen && (
+        <div className="employees-modal-backdrop" onClick={closeModal}>
+          <div
+            className="employees-modal"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="employees-modal__header">
+              <div>
+                <h2>
+                  {editingId ? "Modifier un utilisateur" : "Ajouter un utilisateur"}
+                </h2>
+                <p>
+                  {editingId
+                    ? "Mettez a jour les informations du collaborateur."
+                    : "Creez un nouveau compte interne avec invitation email."}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="employees-modal__close"
+                onClick={closeModal}
+                aria-label="Fermer"
+              >
+                X
+              </button>
+            </div>
+
+            {error && (
+              <div className="employees-alert employees-alert--error">{error}</div>
             )}
+
+            <form className="employees-form" onSubmit={handleSubmit}>
+              <label>
+                <span>Nom complet</span>
+                <input
+                  type="text"
+                  value={form.NomComplet}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      NomComplet: event.target.value,
+                    }))
+                  }
+                  placeholder="Ex. Salma Ben Ali"
+                  required
+                />
+              </label>
+
+              <label>
+                <span>Email</span>
+                <input
+                  type="email"
+                  value={form.Email}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, Email: event.target.value }))
+                  }
+                  placeholder="nom.prenom@leoni.local"
+                  required
+                />
+              </label>
+
+              <div className="employees-form__grid">
+                <label>
+                  <span>Role</span>
+                  <select
+                    value={form.Role}
+                    onChange={(event) =>
+                      setForm((current) => ({ ...current, Role: event.target.value }))
+                    }
+                  >
+                    <option value="admin">admin</option>
+                    <option value="recruteur">recruteur</option>
+                    <option value="contrats">contrats</option>
+                  </select>
+                </label>
+
+                <label>
+                  <span>Acces foyer</span>
+                  <select
+                    value={form.AccesFoyer}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        AccesFoyer: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="1">Oui</option>
+                    <option value="0">Non</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="employees-form__actions">
+                <button
+                  type="button"
+                  className="employees-button employees-button--secondary"
+                  onClick={closeModal}
+                >
+                  Annuler
+                </button>
+
+                <button
+                  type="submit"
+                  className="employees-button employees-button--primary"
+                  disabled={saving}
+                >
+                  {saving
+                    ? "Enregistrement..."
+                    : editingId
+                      ? "Enregistrer"
+                      : "Ajouter"}
+                </button>
+              </div>
+            </form>
           </div>
-        </section>
-
-        <section className="employees-card employees-card--form">
-          <div className="employees-card__head">
-            <div>
-              <h3>{editingId ? "Modifier un utilisateur" : "Ajouter un utilisateur"}</h3>
-              <p>{editingId ? "Le mot de passe est optionnel lors d'une modification." : "Creation d'un nouveau compte systeme."}</p>
-            </div>
-          </div>
-
-          <form className="employees-form" onSubmit={handleSubmit}>
-            <label>
-              <span>Nom complet</span>
-              <input
-                type="text"
-                value={form.NomComplet}
-                onChange={(event) => setForm((current) => ({ ...current, NomComplet: event.target.value }))}
-                required
-              />
-            </label>
-
-            <label>
-              <span>Email</span>
-              <input
-                type="email"
-                value={form.Email}
-                onChange={(event) => setForm((current) => ({ ...current, Email: event.target.value }))}
-                required
-              />
-            </label>
-
-            <label>
-              <span>Mot de passe</span>
-              <input
-                type="password"
-                value={form.MotDePasse}
-                onChange={(event) => setForm((current) => ({ ...current, MotDePasse: event.target.value }))}
-                required={!editingId}
-                placeholder={editingId ? "Laisser vide pour conserver l'ancien" : ""}
-              />
-            </label>
-
-            <label>
-              <span>Role</span>
-              <select
-                value={form.Role}
-                onChange={(event) => setForm((current) => ({ ...current, Role: event.target.value }))}
-              >
-                <option value="admin">admin</option>
-                <option value="recruteur">recruteur</option>
-                <option value="contrats">contrats</option>
-              </select>
-            </label>
-
-            <label>
-              <span>Acces foyer</span>
-              <select
-                value={String(form.AccesFoyer)}
-                onChange={(event) => setForm((current) => ({ ...current, AccesFoyer: Number(event.target.value) }))}
-              >
-                <option value="1">Oui</option>
-                <option value="0">Non</option>
-              </select>
-            </label>
-
-            <div className="employees-form__actions">
-              <button type="submit" disabled={saving}>
-                {saving ? "Enregistrement..." : editingId ? "Enregistrer" : "Ajouter"}
-              </button>
-              <button type="button" className="secondary" onClick={resetForm}>
-                Annuler
-              </button>
-            </div>
-          </form>
-        </section>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

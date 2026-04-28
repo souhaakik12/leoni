@@ -17,6 +17,7 @@ import ContractSessionsPage from "./pages/ContractSessionsPage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage.jsx";
 import ResetPasswordPage from "./pages/ResetPasswordPage.jsx";
+import SetupAccountPage from "./pages/SetupAccountPage.jsx";
 import EmployeesPage from "./pages/EmployeesPage.jsx";
 import CreateMissionPage from "./pages/CreateMissionPage.jsx";
 import CandidatsPage from "./pages/CandidatsPage.jsx";
@@ -128,6 +129,7 @@ export default function App() {
             <Route path="/login" element={<LoginPageWrapper />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/setup-account" element={<SetupAccountPage />} />
             <Route path="/*"    element={<AppLayout />} />
           </Routes>
           </RecrutementsProvider>

@@ -1,0 +1,234 @@
+.setup-account-page {
+  min-height: 100vh;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at top left, rgba(126, 173, 214, 0.28), transparent 38%),
+    linear-gradient(145deg, #edf5fb 0%, #e3eef7 48%, #d8e8f4 100%);
+}
+
+.setup-account-card {
+  width: min(100%, 520px);
+  padding: 30px;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(147, 183, 211, 0.28);
+  box-shadow: 0 28px 60px rgba(27, 79, 116, 0.14);
+}
+
+.setup-account-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.setup-account-brand__mark {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #0b5f89 0%, #1796d2 100%);
+  color: #fff;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  box-shadow: 0 18px 30px rgba(11, 95, 137, 0.2);
+}
+
+.setup-account-brand__text span {
+  display: block;
+  color: #0d3f5d;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.setup-account-header {
+  margin-bottom: 22px;
+}
+
+.setup-account-header h1 {
+  margin: 0 0 8px;
+  color: #0f2940;
+  font-size: 32px;
+  line-height: 1.15;
+}
+
+.setup-account-header p {
+  margin: 0;
+  color: #5d7a92;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.setup-account-alert {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.setup-account-alert--info {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+}
+
+.setup-account-alert--error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+}
+
+.setup-account-alert--success {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+}
+
+.setup-account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.setup-account-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setup-account-field span {
+  color: #476982;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.setup-account-field input {
+  width: 100%;
+  min-height: 54px;
+  border: 1px solid rgba(138, 172, 199, 0.34);
+  border-radius: 16px;
+  padding: 0 16px;
+  background: #fbfdff;
+  color: #13324a;
+  font-size: 14px;
+  outline: none;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+
+.setup-account-field input:focus {
+  border-color: rgba(23, 150, 210, 0.42);
+  box-shadow: 0 0 0 4px rgba(23, 150, 210, 0.12);
+  background: #fff;
+}
+
+.setup-account-field input[readonly] {
+  background: #f3f8fc;
+  color: #35546d;
+}
+
+.setup-account-field input:disabled {
+  cursor: not-allowed;
+}
+
+.setup-account-password {
+  position: relative;
+}
+
+.setup-account-password input {
+  padding-right: 58px;
+}
+
+.setup-account-password__toggle {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: #53738d;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.setup-account-password__toggle svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.setup-account-password__toggle:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.setup-account-submit {
+  margin-top: 8px;
+  min-height: 56px;
+  border: none;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #0b5f89 0%, #1796d2 100%);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 18px 34px rgba(11, 95, 137, 0.2);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.setup-account-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 20px 38px rgba(11, 95, 137, 0.24);
+}
+
+.setup-account-submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.setup-account-link {
+  display: inline-block;
+  margin-top: 18px;
+  color: #2c678e;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+@media (max-width: 640px) {
+  .setup-account-page {
+    padding: 16px;
+  }
+
+  .setup-account-card {
+    padding: 22px 18px;
+    border-radius: 24px;
+  }
+
+  .setup-account-header h1 {
+    font-size: 28px;
+  }
+}

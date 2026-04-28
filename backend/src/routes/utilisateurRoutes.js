@@ -4,11 +4,14 @@ const utilisateurController = require("../controllers/utilisateurController");
 
 const router = express.Router();
 
+router.get("/invite/:token", utilisateurController.getInviteByToken);
+router.post("/invite/:token/setup", utilisateurController.setupAccount);
+
 router.use(requireRole([ROLE_ADMIN]));
 
-router.get("/", utilisateurController.getUsers);
-router.post("/", utilisateurController.createUser);
-router.put("/:id", utilisateurController.updateUser);
-router.delete("/:id", utilisateurController.deleteUser);
+router.get("/", utilisateurController.listUtilisateurs);
+router.post("/", utilisateurController.createUtilisateur);
+router.put("/:id", utilisateurController.updateUtilisateur);
+router.delete("/:id", utilisateurController.deactivateUtilisateur);
 
 module.exports = router;

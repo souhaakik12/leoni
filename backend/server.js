@@ -711,6 +711,15 @@ app.listen(3000, () => {
         .catch((err) => {
             console.error("Failed to init contract workflow schema:", err.message);
         });
-}); 
-
-
+});
+try {
+    require("dotenv").config();
+} catch (_error) {
+    if (typeof process.loadEnvFile === "function") {
+        try {
+            process.loadEnvFile();
+        } catch (_loadError) {
+            // Ignore fallback loading errors and keep existing process.env values.
+        }
+    }
+}
