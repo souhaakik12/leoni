@@ -11,6 +11,22 @@ function readTrimmed(body, ...keys) {
     return "";
 }
 
+function readInteger(body, ...keys) {
+    for (const key of keys) {
+        const value = body?.[key];
+        if (value === undefined || value === null || value === "") {
+            continue;
+        }
+
+        const parsed = Number(value);
+        if (Number.isInteger(parsed) && parsed > 0) {
+            return parsed;
+        }
+    }
+
+    return null;
+}
+
 exports.login = async (req, res) => {
     try {
         const email = readTrimmed(req.body, "email", "Email");
@@ -53,18 +69,18 @@ exports.login = async (req, res) => {
 
 exports.updateProfile = async (req, res) => {
     try {
-        const email = readTrimmed(req.body, "email", "Email");
-        const nom = readTrimmed(req.body, "nom", "Nom", "NomComplet");
-        const newEmail = readTrimmed(req.body, "newEmail", "NewEmail", "emailNouveau");
+        const id = readInteger(req.body, "id", "Id");
+        const nom = readTrimmed(req.body, "NomComplet", "nom", "Nom");
+        const email = readTrimmed(req.body, "Email", "email", "newEmail", "NewEmail");
 
-        if (!email || !nom || !newEmail) {
+        if (!id || !email || !nom) {
             return res.status(400).json({
                 success: false,
                 message: "Nom complet et adresse e-mail sont obligatoires.",
             });
         }
 
-        const utilisateur = await utilisateurModel.findActiveByEmail(email);
+        const utilisateur = await utilisateurModel.findActiveById(id);
         if (!utilisateur) {
             return res.status(404).json({
                 success: false,
@@ -72,20 +88,25 @@ exports.updateProfile = async (req, res) => {
             });
         }
 
-        if (newEmail !== email) {
-            const existingEmail = await utilisateurModel.findByEmail(newEmail);
-            if (existingEmail && existingEmail.Id !== utilisateur.Id) {
-                return res.status(409).json({
-                    success: false,
-                    message: "Cette adresse e-mail est deja utilisee.",
-                });
-            }
+        const existingEmail = await utilisateurModel.findByEmailExceptId(email, id);
+        if (existingEmail) {
+            return res.status(409).json({
+                success: false,
+                message: "Cette adresse e-mail est deja utilisee.",
+            });
         }
 
-        const updatedUser = await utilisateurModel.updateProfileByEmail(email, {
+        const updatedUser = await utilisateurModel.updateProfileById(id, {
             NomComplet: nom,
-            NewEmail: newEmail,
+            Email: email,
         });
+
+        if (!updatedUser) {
+            return res.status(404).json({
+                success: false,
+                message: "Utilisateur introuvable.",
+            });
+        }
 
         return res.json({
             success: true,
@@ -95,6 +116,7 @@ exports.updateProfile = async (req, res) => {
                 NomComplet: updatedUser.NomComplet,
                 Email: updatedUser.Email,
                 Role: updatedUser.Role,
+                Actif: updatedUser.Actif,
                 AccesFoyer: updatedUser.AccesFoyer,
             },
         });
@@ -109,26 +131,47 @@ exports.updateProfile = async (req, res) => {
 
 exports.changePassword = async (req, res) => {
     try {
+        const id = readInteger(req.body, "id", "Id");
         const email = readTrimmed(req.body, "email", "Email");
         const currentPassword = readTrimmed(req.body, "currentPassword", "CurrentPassword");
         const newPassword = readTrimmed(req.body, "newPassword", "NewPassword");
 
-        if (!email || !currentPassword || !newPassword) {
+        if (!id || !email || !currentPassword || !newPassword) {
             return res.status(400).json({
                 success: false,
                 message: "Tous les champs sont obligatoires.",
             });
         }
 
-        const utilisateur = await utilisateurModel.findActiveByEmail(email);
-        if (!utilisateur || utilisateur.MotDePasse !== currentPassword) {
+        if (newPassword.length < 8) {
+            return res.status(400).json({
+                success: false,
+                message: "Le nouveau mot de passe doit contenir au moins 8 caracteres.",
+            });
+        }
+
+        const utilisateur = await utilisateurModel.findActiveById(id);
+        if (!utilisateur || utilisateur.Email?.toLowerCase() !== email.toLowerCase()) {
+            return res.status(404).json({
+                success: false,
+                message: "Utilisateur introuvable.",
+            });
+        }
+
+        if (utilisateur.MotDePasse !== currentPassword) {
             return res.status(401).json({
                 success: false,
                 message: "Mot de passe actuel incorrect.",
             });
         }
 
-        await utilisateurModel.updatePasswordByEmail(email, newPassword);
+        const updatedUser = await utilisateurModel.updatePasswordById(id, newPassword);
+        if (!updatedUser) {
+            return res.status(404).json({
+                success: false,
+                message: "Utilisateur introuvable.",
+            });
+        }
 
         return res.json({
             success: true,

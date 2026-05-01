@@ -43,6 +43,7 @@ function getInitials(fullName = "") {
 
 export default function EmployeesPage() {
   const { user } = useAuth();
+  const currentUserId = user?.Id || user?.id;
   const [users, setUsers] = useState([]);
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
@@ -53,6 +54,9 @@ export default function EmployeesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteError, setDeleteError] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const totalCount = users.length;
   const activeCount = users.filter((item) => Number(item.Actif) === 1).length;
@@ -132,6 +136,12 @@ export default function EmployeesPage() {
     setIsModalOpen(true);
   };
 
+  const closeDeleteModal = () => {
+    setDeleteTarget(null);
+    setDeleteError("");
+    setIsDeleting(false);
+  };
+
   const handleEdit = (selectedUser) => {
     setEditingId(selectedUser.Id);
     setForm({
@@ -144,6 +154,17 @@ export default function EmployeesPage() {
     setMessage("");
     setError("");
     setIsModalOpen(true);
+  };
+
+  const handleDeleteRequest = (selectedUser) => {
+    if (selectedUser.Id === currentUserId) {
+      return;
+    }
+
+    setDeleteTarget(selectedUser);
+    setDeleteError("");
+    setMessage("");
+    setError("");
   };
 
   const handleSubmit = async (event) => {
@@ -199,28 +220,37 @@ export default function EmployeesPage() {
     }
   };
 
-  const handleDeactivate = async (selectedUser) => {
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget || deleteTarget.Id === currentUserId) {
+      return;
+    }
+
+    setDeleteError("");
     setError("");
     setMessage("");
+    setIsDeleting(true);
 
     try {
-      const response = await fetch(`${API_URL}/${selectedUser.Id}`, {
+      const response = await fetch(`${API_URL}/${deleteTarget.Id}`, {
         method: "DELETE",
         headers: buildRoleHeaders(user),
       });
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok || data?.success === false) {
-        throw new Error(data?.message || "Desactivation impossible.");
+        throw new Error(data?.message || "Suppression impossible.");
       }
 
-      setMessage(data?.message || `Utilisateur ${selectedUser.NomComplet} desactive.`);
-      if (editingId === selectedUser.Id) {
+      setMessage(data?.message || "Utilisateur supprime avec succes.");
+      if (editingId === deleteTarget.Id) {
         closeModal();
       }
+      closeDeleteModal();
       await loadUsers();
     } catch (requestError) {
-      setError(requestError.message || "Desactivation impossible.");
+      setDeleteError(requestError.message || "Suppression impossible.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -325,6 +355,7 @@ export default function EmployeesPage() {
               const isActive = Number(item.Actif) === 1;
               const hasHomeAccess =
                 item.AccesFoyer !== undefined && item.AccesFoyer !== null;
+              const isCurrentUser = item.Id === currentUserId;
 
               return (
                 <article key={item.Id} className="employee-card">
@@ -382,17 +413,24 @@ export default function EmployeesPage() {
 
                     <button
                       type="button"
-                      className={`employees-button ${
-                        isActive
-                          ? "employees-button--warning"
-                          : "employees-button--danger"
-                      }`}
-                      onClick={() => handleDeactivate(item)}
-                      disabled={!isActive}
+                      className="employees-button employees-button--danger"
+                      onClick={() => handleDeleteRequest(item)}
+                      disabled={isCurrentUser}
+                      title={
+                        isCurrentUser
+                          ? "Vous ne pouvez pas supprimer votre propre compte."
+                          : undefined
+                      }
                     >
-                      {isActive ? "Desactiver" : "Inactif"}
+                      Supprimer
                     </button>
                   </div>
+
+                  {isCurrentUser ? (
+                    <p className="employee-card__hint">
+                      Vous ne pouvez pas supprimer votre propre compte.
+                    </p>
+                  ) : null}
                 </article>
               );
             })}
@@ -516,6 +554,64 @@ export default function EmployeesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="employees-modal-backdrop" onClick={closeDeleteModal}>
+          <div
+            className="employees-modal employees-modal--confirm"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="employees-modal__header">
+              <div>
+                <h2>Confirmer la suppression</h2>
+                <p>
+                  Voulez-vous vraiment supprimer cet utilisateur ? Cette action est definitive.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="employees-modal__close"
+                onClick={closeDeleteModal}
+                aria-label="Fermer"
+              >
+                X
+              </button>
+            </div>
+
+            {deleteError ? (
+              <div className="employees-alert employees-alert--error">{deleteError}</div>
+            ) : null}
+
+            <div className="employees-confirm">
+              <div className="employees-confirm__user">
+                <strong>{deleteTarget.NomComplet}</strong>
+                <span>{deleteTarget.Email}</span>
+              </div>
+
+              <div className="employees-form__actions employees-form__actions--confirm">
+                <button
+                  type="button"
+                  className="employees-button employees-button--secondary"
+                  onClick={closeDeleteModal}
+                  disabled={isDeleting}
+                >
+                  Annuler
+                </button>
+
+                <button
+                  type="button"
+                  className="employees-button employees-button--danger"
+                  onClick={handleConfirmDelete}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? "Suppression..." : "Supprimer definitivement"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

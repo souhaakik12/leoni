@@ -43,6 +43,30 @@ async function findActiveByEmail(email) {
     return mapUtilisateurRow(result.recordset?.[0]);
 }
 
+async function findActiveById(id) {
+    const pool = await sql.connect(config);
+    const result = await pool.request()
+        .input("id", sql.Int, id)
+        .query(`
+            SELECT TOP 1
+                Id,
+                NomComplet,
+                Email,
+                MotDePasse,
+                Role,
+                Actif,
+                CreeLe,
+                AccesFoyer,
+                InviteToken,
+                InviteTokenExpire
+            FROM dbo.Utilisateurs
+            WHERE Id = @id
+              AND Actif = 1;
+        `);
+
+    return mapUtilisateurRow(result.recordset?.[0]);
+}
+
 async function findByEmail(email) {
     const pool = await sql.connect(config);
     const result = await pool.request()
@@ -208,27 +232,23 @@ async function updateUtilisateur(id, data) {
     return mapUtilisateurRow(result.recordset?.[0]);
 }
 
-async function deactivateUtilisateur(id) {
+async function deleteUtilisateur(id) {
     const pool = await sql.connect(config);
     const result = await pool.request()
         .input("Id", sql.Int, id)
         .query(`
-            UPDATE dbo.Utilisateurs
-            SET
-                Actif = 0,
-                InviteToken = NULL,
-                InviteTokenExpire = NULL
+            DELETE FROM dbo.Utilisateurs
             OUTPUT
-                INSERTED.Id,
-                INSERTED.NomComplet,
-                INSERTED.Email,
-                INSERTED.MotDePasse,
-                INSERTED.Role,
-                INSERTED.Actif,
-                INSERTED.CreeLe,
-                INSERTED.AccesFoyer,
-                INSERTED.InviteToken,
-                INSERTED.InviteTokenExpire
+                DELETED.Id,
+                DELETED.NomComplet,
+                DELETED.Email,
+                DELETED.MotDePasse,
+                DELETED.Role,
+                DELETED.Actif,
+                DELETED.CreeLe,
+                DELETED.AccesFoyer,
+                DELETED.InviteToken,
+                DELETED.InviteTokenExpire
             WHERE Id = @Id;
         `);
 
@@ -319,6 +339,35 @@ async function updateProfileByEmail(email, data) {
     return mapUtilisateurRow(result.recordset?.[0]);
 }
 
+async function updateProfileById(id, data) {
+    const pool = await sql.connect(config);
+    const result = await pool.request()
+        .input("id", sql.Int, id)
+        .input("NomComplet", sql.VarChar(100), data.NomComplet)
+        .input("Email", sql.VarChar(150), data.Email)
+        .query(`
+            UPDATE dbo.Utilisateurs
+            SET
+                NomComplet = @NomComplet,
+                Email = @Email
+            OUTPUT
+                INSERTED.Id,
+                INSERTED.NomComplet,
+                INSERTED.Email,
+                INSERTED.MotDePasse,
+                INSERTED.Role,
+                INSERTED.Actif,
+                INSERTED.CreeLe,
+                INSERTED.AccesFoyer,
+                INSERTED.InviteToken,
+                INSERTED.InviteTokenExpire
+            WHERE Id = @id
+              AND Actif = 1;
+        `);
+
+    return mapUtilisateurRow(result.recordset?.[0]);
+}
+
 async function updatePasswordByEmail(email, newPassword) {
     const pool = await sql.connect(config);
     const result = await pool.request()
@@ -345,20 +394,51 @@ async function updatePasswordByEmail(email, newPassword) {
     return mapUtilisateurRow(result.recordset?.[0]);
 }
 
+async function updatePasswordById(id, newPassword) {
+    const pool = await sql.connect(config);
+    const result = await pool.request()
+        .input("id", sql.Int, id)
+        .input("MotDePasse", sql.VarChar(255), newPassword)
+        .query(`
+            UPDATE dbo.Utilisateurs
+            SET MotDePasse = @MotDePasse
+            OUTPUT
+                INSERTED.Id,
+                INSERTED.NomComplet,
+                INSERTED.Email,
+                INSERTED.MotDePasse,
+                INSERTED.Role,
+                INSERTED.Actif,
+                INSERTED.CreeLe,
+                INSERTED.AccesFoyer,
+                INSERTED.InviteToken,
+                INSERTED.InviteTokenExpire
+            WHERE Id = @id
+              AND Actif = 1;
+        `);
+
+    return mapUtilisateurRow(result.recordset?.[0]);
+}
+
 module.exports = {
+    findActiveById,
     findActiveByEmail,
     findByEmail,
     findByEmailExceptId,
     findAll,
     createWithInvite,
     updateUtilisateur,
-    deactivateUtilisateur,
+    deleteUtilisateur,
     findByInviteToken,
     activateAccountWithPassword,
     updateProfileByEmail,
+    updateProfileById,
     updatePasswordByEmail,
+    updatePasswordById,
     listUsers: findAll,
     createUser: createWithInvite,
     updateUser: updateUtilisateur,
-    deactivateUser: deactivateUtilisateur,
+    deactivateUtilisateur: deleteUtilisateur,
+    deactivateUser: deleteUtilisateur,
+    deleteUser: deleteUtilisateur,
 };

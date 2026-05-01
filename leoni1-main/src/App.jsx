@@ -11,7 +11,6 @@ import DormsPage from "./pages/DormsPage.jsx";
 import DormResidentsPage from "./pages/DormResidentsPage.jsx";
 import MissionsPage from "./pages/MissionsPage.jsx";
 import ContractsPage from "./pages/ContractsPage.jsx";
-import RecruteurDashboard from "./pages/RecruteurDashboard.jsx";
 import ContractReceptionPage from "./pages/ContractReceptionPage.jsx";
 import ContractSessionsPage from "./pages/ContractSessionsPage.jsx";
 import ProfilePage from "./pages/ProfilePage.jsx";
@@ -68,7 +67,7 @@ function AppLayout() {
             } />
             <Route path="/missions" element={
               <ProtectedRoute allowedRoles={[ROLE_ADMIN, ROLE_RECRUTEUR]}>
-                {hasRole(user, [ROLE_RECRUTEUR]) ? <RecruteurDashboard /> : <MissionsPage />}
+                <MissionsPage />
               </ProtectedRoute>
             } />
             <Route path="/missions/create" element={

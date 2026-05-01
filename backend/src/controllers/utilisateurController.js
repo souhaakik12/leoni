@@ -254,7 +254,7 @@ exports.updateUtilisateur = async (req, res) => {
     }
 };
 
-exports.deactivateUtilisateur = async (req, res) => {
+exports.deleteUtilisateur = async (req, res) => {
     try {
         const id = Number(req.params?.id);
 
@@ -265,7 +265,7 @@ exports.deactivateUtilisateur = async (req, res) => {
             });
         }
 
-        const user = await utilisateurModel.deactivateUtilisateur(id);
+        const user = await utilisateurModel.deleteUtilisateur(id);
         if (!user) {
             return res.status(404).json({
                 success: false,
@@ -275,14 +275,14 @@ exports.deactivateUtilisateur = async (req, res) => {
 
         return res.json({
             success: true,
-            message: "Utilisateur desactive avec succes.",
+            message: "Utilisateur supprime avec succes.",
             user: sanitizeUser(user),
         });
     } catch (error) {
         console.error("Erreur DELETE /api/utilisateurs/:id :", error);
         return res.status(500).json({
             success: false,
-            message: "Impossible de desactiver l'utilisateur.",
+            message: "Impossible de supprimer l'utilisateur.",
         });
     }
 };
@@ -365,4 +365,5 @@ exports.setupAccount = async (req, res) => {
 exports.getUsers = exports.listUtilisateurs;
 exports.createUser = exports.createUtilisateur;
 exports.updateUser = exports.updateUtilisateur;
-exports.deleteUser = exports.deactivateUtilisateur;
+exports.deactivateUtilisateur = exports.deleteUtilisateur;
+exports.deleteUser = exports.deleteUtilisateur;

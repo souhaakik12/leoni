@@ -165,17 +165,11 @@
   flex: 0 0 auto;
 }
 
-.contracts-action--inline-primary,
 .contracts-action--inline-secondary {
   height: 34px;
   padding: 0 12px;
   border-radius: 10px;
   font-size: 12px;
-}
-
-.contracts-action--inline-primary {
-  background: #1d4ed8;
-  color: #ffffff;
 }
 
 .contracts-action--inline-secondary {
@@ -427,9 +421,9 @@
 .contracts-table__actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: flex-start;
   flex-wrap: nowrap;
-  min-width: 176px;
+  min-width: 108px;
 }
 
 .contracts-table__empty {
@@ -1284,12 +1278,6 @@
   border-color: #fdba74;
   background: #fff7ed;
   color: #c2410c;
-}
-
-.contracts-table__actions.is-alerts .contracts-action--inline-primary {
-  border-color: #bfdbfe;
-  background: #eff6ff;
-  color: #1d4ed8;
 }
 
 .contracts-monitor__secondary-table {

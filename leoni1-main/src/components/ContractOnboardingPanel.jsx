@@ -278,12 +278,16 @@ export default function ContractOnboardingPanel() {
       candidateName: candidate.nomComplet || null,
       endpoint: `POST /api/candidats/${candidate.id}/contrat/signer`,
       payload: {
+        typeContrat: normalizedTypeContrat,
         lieu_signature: selectedLieu,
         type_contrat: normalizedTypeContrat,
       },
     });
 
-    const result = await signerContratCandidat(candidate.id, { lieuSignature: selectedLieu });
+    const result = await signerContratCandidat(candidate.id, {
+      lieuSignature: selectedLieu,
+      typeContrat: normalizedTypeContrat,
+    });
     if (!result?.ok) {
       console.error("[ContractOnboardingPanel] Signature contrat echec", result);
       pushToast(result?.message || "Signature contrat impossible.", "error", 3400);

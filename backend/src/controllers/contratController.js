@@ -12,13 +12,14 @@ function handleError(res, error, fallbackMessage) {
 
 exports.getContrats = async (req, res) => {
     try {
-        const contrats = await contratModel.getContratsFront({
+        const result = await contratModel.getContratsFront({
             search: req.query.search,
         });
 
         return res.json({
             ok: true,
-            contrats,
+            contrats: result.contrats,
+            total: result.total,
         });
     } catch (error) {
         return handleError(res, error, "Impossible de charger les contrats.");

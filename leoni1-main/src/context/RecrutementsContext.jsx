@@ -693,14 +693,16 @@ export function RecrutementsProvider({ children }) {
     }
   };
 
-  const signerContratCandidat = async (candidatId, { lieuSignature } = {}) => {
+  const signerContratCandidat = async (candidatId, { lieuSignature, typeContrat } = {}) => {
     const normalizedCandidateId = Number(candidatId);
     if (!Number.isInteger(normalizedCandidateId) || normalizedCandidateId <= 0) {
       return { ok: false, message: "ID candidat invalide." };
     }
 
     const candidate = candidats.find((item) => item.id === normalizedCandidateId);
-    const normalizedType = normalizeContractType(candidate?.type_contrat || candidate?.typeContrat);
+    const normalizedType = normalizeContractType(
+      typeContrat || candidate?.type_contrat || candidate?.typeContrat
+    );
     if (!normalizedType || !isContractType(normalizedType)) {
       return {
         ok: false,
@@ -711,6 +713,7 @@ export function RecrutementsProvider({ children }) {
     const safeLieuSignature = String(lieuSignature || SIGNATURE_SUR_PLACE).trim() || SIGNATURE_SUR_PLACE;
     const endpoint = `http://localhost:3000/api/candidats/${normalizedCandidateId}/contrat/signer`;
     const requestBody = {
+      typeContrat: normalizedType,
       lieu_signature: safeLieuSignature,
       type_contrat: normalizedType,
     };

@@ -3,11 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { useMissions } from "../context/MissionsContext.jsx";
 import { useRecrutements } from "../context/RecrutementsContext.jsx";
 
-const villes = ["Toutes les villes", "Tunis", "Sfax", "Sousse", "Bizerte", "Kairouan"];
+const defaultVilles = ["Toutes les villes"];
+const PLANIFIED_STATUS = "Planifi\u00e9e";
+const COMPLETED_STATUS = "Termin\u00e9e";
+const IN_PROGRESS_STATUS = "En cours";
 const statutConfig = {
-  "Terminée":  { bg: "#dcfce7", color: "#16a34a" },
-  "En cours":  { bg: "#dbeafe", color: "#2563eb" },
-  "Planifiée": { bg: "#f3f4f6", color: "#6b7280" },
+  [COMPLETED_STATUS]:  { bg: "#dcfce7", color: "#16a34a" },
+  [IN_PROGRESS_STATUS]:  { bg: "#dbeafe", color: "#2563eb" },
+  [PLANIFIED_STATUS]: { bg: "#f3f4f6", color: "#6b7280" },
 };
 
 // ── small shared UI ──────────────────────────────────────────────────────────
@@ -41,7 +44,7 @@ function NewEntryModal({ missions, onClose, onCreated }) {
   const [missionId, setMissionId] = useState("");
   const [err, setErr] = useState("");
 
-  const activeMissions = missions.filter(m => m.statut !== "Terminée");
+  const activeMissions = missions.filter(m => m.statut !== COMPLETED_STATUS);
 
   const handle = () => {
     if (!missionId) { setErr("Veuillez sélectionner une mission."); return; }
@@ -183,7 +186,19 @@ export default function RecruteurDashboard() {
   const [showNewEntry,  setShowNewEntry]  = useState(false);
   const [addCandidatEntry, setAddCandidatEntry] = useState(null);
 
-  const filteredMissions = missions.filter(m => filtreVille === "Toutes les villes" || m.ville === filtreVille);
+  const villes = [
+    ...defaultVilles,
+    ...Array.from(new Set(
+      missions
+        .map((m) => m.Gouvernorat || String(m.ville || "").split(" - ")[0].trim())
+        .filter(Boolean)
+    )),
+  ];
+
+  const filteredMissions = missions.filter((m) => {
+    const missionGovernorate = m.Gouvernorat || String(m.ville || "").split(" - ")[0].trim();
+    return filtreVille === "Toutes les villes" || missionGovernorate === filtreVille;
+  });
 
   // Today's entries
   const todayEntries  = entries.filter(e => e.date === todayStr);
@@ -282,7 +297,7 @@ export default function RecruteurDashboard() {
                       <td style={{ padding:"12px 16px" }}>
                         <div style={{ display:"flex",alignItems:"center",gap:8 }}>
                           {mTotal > 0 && <span style={{ background:"#dcfce7",color:"#16a34a",borderRadius:99,padding:"2px 9px",fontSize:11,fontWeight:800 }}>{mTotal} recrutés</span>}
-                          {m.statut !== "Terminée" && (
+                          {m.statut !== COMPLETED_STATUS && (
                             <button onClick={() => { setActiveTab("saisie"); setShowNewEntry(true); }}
                               style={{ padding:"4px 10px",border:"1px solid #bfdbfe",borderRadius:6,background:"#eff6ff",color:"#2563eb",fontSize:11,fontWeight:700,cursor:"pointer" }}>
                               + Saisir

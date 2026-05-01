@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { buildRoleHeaders } from "../utils/roles.js";
 import "./ContractsPage.css";
@@ -341,12 +340,9 @@ function AlertBadge({ contract }) {
   return <span className={`contracts-badge is-alert-${alertState.tone}`}>{alertState.label}</span>;
 }
 
-function ActionMenu({ onConsult, alertMode = false }) {
+function ActionMenu({ alertMode = false }) {
   return (
     <div className={`contracts-table__actions ${alertMode ? "is-alerts" : ""}`.trim()}>
-      <button type="button" className="contracts-action contracts-action--inline-primary" onClick={onConsult}>
-        Consulter
-      </button>
       <button
         type="button"
         className={`contracts-action ${
@@ -360,13 +356,13 @@ function ActionMenu({ onConsult, alertMode = false }) {
 }
 
 export default function ContractsPage() {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const [tab, setTab] = useState(TAB_CONTRACTS);
   const [search, setSearch] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useState(1);
   const [contracts, setContracts] = useState([]);
+  const [contractsTotal, setContractsTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -382,6 +378,7 @@ export default function ContractsPage() {
 
     if (!user) {
       setContracts([]);
+      setContractsTotal(0);
       setLoading(false);
       setError("");
       return () => {
@@ -415,14 +412,17 @@ export default function ContractsPage() {
         const nextContracts = Array.isArray(payload?.contrats)
           ? payload.contrats.map(mapContractRow)
           : [];
+        const nextTotal = Number(payload?.total);
 
         if (!ignore) {
           setContracts(nextContracts);
+          setContractsTotal(Number.isFinite(nextTotal) ? nextTotal : nextContracts.length);
         }
       } catch (loadError) {
         if (!ignore && loadError?.name !== "AbortError") {
           console.error("Erreur chargement contrats:", loadError);
           setContracts([]);
+          setContractsTotal(0);
           setError(loadError?.message || "Impossible de charger les contrats.");
         }
       } finally {
@@ -451,6 +451,7 @@ export default function ContractsPage() {
 
   const displayedContracts = tab === TAB_ALERTS ? alertContracts : contracts;
   const alertsTotal = alertContracts.length;
+  const displayedTotal = tab === TAB_ALERTS ? alertsTotal : contractsTotal;
 
   const totalPages = Math.max(1, Math.ceil(displayedContracts.length / rowsPerPage));
 
@@ -472,10 +473,6 @@ export default function ContractsPage() {
 
   const pageStart = displayedContracts.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1;
   const pageEnd = pageStart === 0 ? 0 : Math.min(currentPage * rowsPerPage, displayedContracts.length);
-
-  const openCandidateDossier = () => {
-    navigate("/contracts/reception");
-  };
 
   const totalLabel = tab === TAB_ALERTS ? "alertes affichees" : "contrats affiches";
   const summaryLabel = tab === TAB_ALERTS ? "alertes affichees" : "contrats affiches";
@@ -553,7 +550,7 @@ export default function ContractsPage() {
             </label>
 
             <div className="contracts-toolbar__meta">
-              <strong>{displayedContracts.length}</strong>
+              <strong>{displayedTotal}</strong>
               <span>{totalLabel}</span>
             </div>
 
@@ -627,7 +624,7 @@ export default function ContractsPage() {
                         <AlertBadge contract={contract} />
                       </td>
                       <td>
-                        <ActionMenu onConsult={openCandidateDossier} />
+                        <ActionMenu />
                       </td>
                     </tr>
                   ))
@@ -724,7 +721,7 @@ export default function ContractsPage() {
                             <AlertBadge contract={contract} />
                           </td>
                           <td>
-                            <ActionMenu onConsult={openCandidateDossier} alertMode />
+                            <ActionMenu alertMode />
                           </td>
                         </tr>
                       ))
@@ -748,7 +745,7 @@ export default function ContractsPage() {
             <strong>
               {pageStart} - {pageEnd}
             </strong>
-            <span>sur {displayedContracts.length} {summaryLabel}</span>
+            <span>sur {displayedTotal} {summaryLabel}</span>
           </div>
 
           <div className="contracts-pagination">

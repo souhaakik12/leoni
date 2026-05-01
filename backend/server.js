@@ -10,6 +10,7 @@ const referenceRoutes = require("./src/routes/referenceRoutes");
 const documentRoutes = require("./src/routes/documentRoutes");
 const authRoutes = require("./src/routes/authRoutes");
 const utilisateurRoutes = require("./src/routes/utilisateurRoutes");
+const missionRoutes = require("./src/routes/missionRoutes");
 const foyerRoutes = require("./routes/foyerRoutes");
 const residentRoutes = require("./routes/residentRoutes");
 const {
@@ -33,6 +34,7 @@ app.use("/api/candidats", documentContratRoutes);
 app.use("/api/contrats", contratRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/utilisateurs", utilisateurRoutes);
+app.use("/api/missions", missionRoutes);
 app.use("/api/seances-contrat", requireRole(CONTRACT_ALLOWED_ROLES));
 app.use("/api/seances-contrat", seanceContratRoutes);
 app.use("/api/test-entretien", testEntretienRoutes);

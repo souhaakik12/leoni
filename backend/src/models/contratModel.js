@@ -40,7 +40,7 @@ function buildListeContratsQuery(request, search) {
     const whereClause = searchClause ? `WHERE ${searchClause}` : "";
 
     return `
-        SELECT TOP 100
+        SELECT
             id_contrat,
             cin,
             nom_prenom,
@@ -57,9 +57,11 @@ function buildListeContratsQuery(request, search) {
             jours_restants,
             jours_restants_affichage,
             alerte
-        FROM dbo.vw_contrats_front v
+        FROM dbo.vw_contrats_interface v
         ${whereClause}
         ORDER BY
+            CASE WHEN v.date_signature IS NULL THEN 1 ELSE 0 END,
+            v.date_signature DESC,
             CASE WHEN v.date_debut_contrat IS NULL THEN 1 ELSE 0 END,
             v.date_debut_contrat DESC;
     `;
@@ -72,8 +74,19 @@ async function getContratsFront({ search }) {
     const request = pool.request();
     const query = buildListeContratsQuery(request, normalizedSearch);
     const result = await request.query(query);
+    const countRequest = pool.request();
+    const searchClause = applySearchFilter(countRequest, normalizedSearch);
+    const whereClause = searchClause ? `WHERE ${searchClause}` : "";
+    const countResult = await countRequest.query(`
+        SELECT COUNT(*) AS total
+        FROM dbo.vw_contrats_interface v
+        ${whereClause};
+    `);
 
-    return result.recordset || [];
+    return {
+        contrats: result.recordset || [],
+        total: Number(countResult.recordset?.[0]?.total || 0),
+    };
 }
 
 module.exports = {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
-import { ROLE_ADMIN, ROLE_RECRUTEUR, ROLE_RESPONSABLE_CONTRAT, hasFoyerAccess, normalizeRole } from "../utils/roles.js";
+import { ROLE_ADMIN, ROLE_RECRUTEUR, ROLE_RESPONSABLE_CONTRAT, buildRoleHeaders, hasFoyerAccess, normalizeRole } from "../utils/roles.js";
 import "./ProfilePage.css";
 
 const roleInfo = {
@@ -27,8 +27,65 @@ const roleInfo = {
   },
 };
 
+function normalizeText(value) {
+  if (value === undefined || value === null) return "";
+  return String(value).trim();
+}
+
+function toDisplayDate(value) {
+  const raw = normalizeText(value);
+  if (!raw) return "Non renseignee";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [year, month, day] = raw.split("-");
+    return `${day}/${month}/${year}`;
+  }
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+  if (isoMatch) {
+    return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+  }
+
+  return raw;
+}
+
+function normalizeMissionStatus(value) {
+  return normalizeText(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function getMissionStatusClass(value) {
+  const normalized = normalizeMissionStatus(value);
+  if (normalized === "terminee") return "profile-mission-card__status profile-mission-card__status--done";
+  if (normalized === "en cours") return "profile-mission-card__status profile-mission-card__status--progress";
+  return "profile-mission-card__status profile-mission-card__status--planned";
+}
+
+function missionCodeLabel(mission) {
+  return mission?.CodeMission || mission?.id || `M${mission?.Id || ""}`;
+}
+
+function getWelcomeMessage(role) {
+  if (role === ROLE_ADMIN) return "Vous gerez l'ensemble du systeme RH.";
+  if (role === ROLE_RECRUTEUR) return "Vous pouvez suivre vos missions et les candidats.";
+  if (role === ROLE_RESPONSABLE_CONTRAT) return "Vous pouvez gerer les dossiers et contrats.";
+  return "Retrouvez ici les informations essentielles de votre compte.";
+}
+
+function getInitials(name) {
+  const words = normalizeText(name).split(/\s+/).filter(Boolean);
+  if (!words.length) return "U";
+
+  return words
+    .slice(0, 2)
+    .map((word) => word.charAt(0).toUpperCase())
+    .join("");
+}
+
 export default function ProfilePage() {
   const { user, updateUser } = useAuth();
+  const userId = user?.Id || user?.id;
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isEditingSecurity, setIsEditingSecurity] = useState(false);
   const [profileName, setProfileName] = useState("");
@@ -42,22 +99,72 @@ export default function ProfilePage() {
   const [passwordError, setPasswordError] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [assignedMissions, setAssignedMissions] = useState([]);
+  const [assignedMissionsError, setAssignedMissionsError] = useState("");
+  const [isLoadingAssignedMissions, setIsLoadingAssignedMissions] = useState(false);
   const normalizedRole = normalizeRole(user?.role);
   const info = roleInfo[normalizedRole] || {};
   const displayName = user?.NomComplet || user?.nom;
   const displayEmail = user?.Email || user?.email;
   const accesFoyerLabel = hasFoyerAccess(user) ? "Autorise" : "Non autorise";
   const statusLabel = "Actif";
-  const permissions = normalizedRole === ROLE_RECRUTEUR
-    ? ["Voir les missions", "Creer une mission", "Suivre les candidats"]
-    : normalizedRole === ROLE_RESPONSABLE_CONTRAT
-      ? ["Voir les contrats", "Receptionner les dossiers", "Gerer les seances contrat"]
-      : ["Administrer les utilisateurs", "Superviser tous les modules", "Consulter les tableaux de bord"];
+  const welcomeMessage = getWelcomeMessage(normalizedRole);
+  const avatarLabel = user?.avatar || getInitials(displayName);
 
   useEffect(() => {
     setProfileName(displayName || "");
     setProfileEmail(displayEmail || "");
   }, [displayName, displayEmail]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchAssignedMissions = async () => {
+      if (!userId) {
+        if (isMounted) {
+          setAssignedMissions([]);
+          setAssignedMissionsError("");
+          setIsLoadingAssignedMissions(false);
+        }
+        return;
+      }
+
+      if (isMounted) {
+        setIsLoadingAssignedMissions(true);
+        setAssignedMissionsError("");
+      }
+
+      try {
+        const response = await fetch(`http://localhost:3000/api/missions/assigned/${userId}`, {
+          headers: buildRoleHeaders(user),
+        });
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok || data?.success === false) {
+          throw new Error(data?.message || "Impossible de charger les missions affectees.");
+        }
+
+        if (isMounted) {
+          setAssignedMissions(Array.isArray(data?.missions) ? data.missions : []);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setAssignedMissions([]);
+          setAssignedMissionsError(error?.message || "Impossible de charger les missions affectees.");
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingAssignedMissions(false);
+        }
+      }
+    };
+
+    fetchAssignedMissions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user, userId]);
 
   const handleProfileEdit = () => {
     setProfileError("");
@@ -79,6 +186,11 @@ export default function ProfilePage() {
     setProfileError("");
     setProfileSuccess("");
 
+    if (!userId) {
+      setProfileError("Impossible d'identifier l'utilisateur connecte.");
+      return;
+    }
+
     if (!profileName.trim() || !profileEmail.trim()) {
       setProfileError("Le nom complet et l'adresse e-mail sont obligatoires.");
       return;
@@ -93,9 +205,9 @@ export default function ProfilePage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email: displayEmail,
-          nom: profileName.trim(),
-          newEmail: profileEmail.trim(),
+          id: userId,
+          NomComplet: profileName.trim(),
+          Email: profileEmail.trim(),
         }),
       });
 
@@ -142,8 +254,18 @@ export default function ProfilePage() {
     setPasswordError("");
     setPasswordSuccess("");
 
+    if (!userId || !displayEmail) {
+      setPasswordError("Impossible d'identifier l'utilisateur connecte.");
+      return;
+    }
+
     if (!currentPassword || !newPassword || !confirmPassword) {
       setPasswordError("Les trois champs sont obligatoires.");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setPasswordError("Le nouveau mot de passe doit contenir au moins 8 caracteres.");
       return;
     }
 
@@ -161,6 +283,7 @@ export default function ProfilePage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          id: userId,
           email: displayEmail,
           currentPassword,
           newPassword,
@@ -187,188 +310,246 @@ export default function ProfilePage() {
 
   return (
     <div className="profile-page">
-      <section className="profile-banner">
-        <div className="profile-banner__overlay" />
-        <div className="profile-banner__content">
-          <div className="profile-banner__avatar">{user?.avatar}</div>
-          <div className="profile-banner__identity">
-            <p className="profile-banner__eyebrow">Profil utilisateur</p>
-            <h1>{displayName}</h1>
-            <div className="profile-banner__meta">
-              <span
-                className="profile-banner__badge"
-                style={{ background: info.bg, color: info.color, borderColor: info.border }}
-              >
-                {info.label}
-              </span>
-              <span>{displayEmail}</span>
-              <span>{info.dept}</span>
-            </div>
+      <section className="profile-hero">
+        <div className="profile-hero__content">
+          <p className="profile-hero__eyebrow">Espace personnel</p>
+          <h1>Bonjour {displayName || "Utilisateur"} !</h1>
+          <p className="profile-hero__text">{welcomeMessage}</p>
+
+          <div className="profile-hero__meta">
+            <span
+              className="profile-hero__badge"
+              style={{ background: info.bg, color: info.color, borderColor: info.border }}
+            >
+              {info.label || "Compte utilisateur"}
+            </span>
           </div>
+        </div>
+
+        <div className="profile-hero__visual" aria-hidden="true">
+          <div className="profile-hero__shape profile-hero__shape--large" />
+          <div className="profile-hero__shape profile-hero__shape--small" />
+          <div className="profile-hero__avatar">{avatarLabel}</div>
         </div>
       </section>
 
-      <div className="profile-page__grid">
-        <section className="profile-card">
-          <div className="profile-card__head">
-            <div>
-              <h3 className="profile-card__title">Informations du compte</h3>
-              <p className="profile-card__subtitle">Coordonnees et informations principales du compte connecte.</p>
+      <div className="profile-dashboard">
+        <div className="profile-dashboard__main">
+          <section className="profile-card profile-card--wide">
+            <div className="profile-card__head">
+              <div>
+                <h3 className="profile-card__title">Informations du compte</h3>
+                <p className="profile-card__subtitle">Coordonnees et informations principales du compte connecte.</p>
+              </div>
+              {!isEditingProfile ? (
+                <button type="button" className="profile-card__action" onClick={handleProfileEdit}>
+                  Modifier
+                </button>
+              ) : null}
             </div>
-            {!isEditingProfile ? (
-              <button type="button" className="profile-card__action" onClick={handleProfileEdit}>
-                Modifier
-              </button>
-            ) : null}
-          </div>
 
-          {profileError ? <div className="profile-card__alert profile-card__alert--error">{profileError}</div> : null}
-          {profileSuccess ? <div className="profile-card__alert profile-card__alert--success">{profileSuccess}</div> : null}
+            {profileError ? <div className="profile-card__alert profile-card__alert--error">{profileError}</div> : null}
+            {profileSuccess ? <div className="profile-card__alert profile-card__alert--success">{profileSuccess}</div> : null}
 
-          {isEditingProfile ? (
-            <form className="profile-edit-form" onSubmit={handleProfileSubmit}>
-              <label className="profile-edit-form__field">
-                <span>Nom complet</span>
-                <input
-                  type="text"
-                  value={profileName}
-                  onChange={(event) => setProfileName(event.target.value)}
-                />
-              </label>
+            {isEditingProfile ? (
+              <form className="profile-edit-form" onSubmit={handleProfileSubmit}>
+                <label className="profile-edit-form__field">
+                  <span>Nom complet</span>
+                  <input
+                    type="text"
+                    value={profileName}
+                    onChange={(event) => setProfileName(event.target.value)}
+                  />
+                </label>
 
-              <label className="profile-edit-form__field">
-                <span>Adresse e-mail</span>
-                <input
-                  type="email"
-                  value={profileEmail}
-                  onChange={(event) => setProfileEmail(event.target.value)}
-                />
-              </label>
+                <label className="profile-edit-form__field">
+                  <span>Adresse e-mail</span>
+                  <input
+                    type="email"
+                    value={profileEmail}
+                    onChange={(event) => setProfileEmail(event.target.value)}
+                  />
+                </label>
 
-              <div className="profile-card__row">
-                <span>Departement</span>
-                <strong>{info.dept}</strong>
-              </div>
-              <div className="profile-card__row">
-                <span>Role</span>
-                <strong>{info.label}</strong>
-              </div>
-              <div className="profile-card__row">
-                <span>Statut</span>
-                <strong>{statusLabel}</strong>
-              </div>
-
-              <div className="profile-edit-form__actions">
-                <button type="submit" className="profile-card__action" disabled={isSavingProfile}>
-                  {isSavingProfile ? "Enregistrement..." : "Enregistrer"}
-                </button>
-                <button type="button" className="profile-card__action profile-card__action--ghost" onClick={handleProfileCancel}>
-                  Annuler
-                </button>
-              </div>
-            </form>
-          ) : (
-            <div className="profile-card__rows">
-              {[
-                { label: "Nom complet", value: displayName },
-                { label: "Adresse e-mail", value: displayEmail },
-                { label: "Departement", value: info.dept },
-                { label: "Role", value: info.label },
-                { label: "Statut", value: statusLabel },
-              ].map((row) => (
-                <div key={row.label} className="profile-card__row">
-                  <span>{row.label}</span>
-                  <strong>{row.value}</strong>
+                <div className="profile-card__rows">
+                  <div className="profile-card__row">
+                    <span>Departement</span>
+                    <strong>{info.dept}</strong>
+                  </div>
+                  <div className="profile-card__row">
+                    <span>Role</span>
+                    <strong>{info.label}</strong>
+                  </div>
+                  <div className="profile-card__row">
+                    <span>Statut</span>
+                    <strong>{statusLabel}</strong>
+                  </div>
+                  <div className="profile-card__row">
+                    <span>Acces foyer</span>
+                    <strong>{accesFoyerLabel}</strong>
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
 
-        <section className="profile-card">
-          <div className="profile-card__head">
-            <h3 className="profile-card__title">Securite</h3>
+                <div className="profile-edit-form__actions">
+                  <button type="submit" className="profile-card__action" disabled={isSavingProfile}>
+                    {isSavingProfile ? "Enregistrement..." : "Enregistrer"}
+                  </button>
+                  <button type="button" className="profile-card__action profile-card__action--ghost" onClick={handleProfileCancel}>
+                    Annuler
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="profile-card__rows">
+                {[
+                  { label: "Nom complet", value: displayName },
+                  { label: "Adresse e-mail", value: displayEmail },
+                  { label: "Departement", value: info.dept },
+                  { label: "Role", value: info.label },
+                  { label: "Statut", value: statusLabel },
+                  { label: "Acces foyer", value: accesFoyerLabel },
+                ].map((row) => (
+                  <div key={row.label} className="profile-card__row">
+                    <span>{row.label}</span>
+                    <strong>{row.value}</strong>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="profile-card profile-missions">
+            <div className="profile-card__head">
+              <div>
+                <h3 className="profile-card__title">Mes missions affectees</h3>
+                <p className="profile-card__subtitle">Missions ou vous etes designe comme responsable.</p>
+              </div>
+            </div>
+
+            {assignedMissionsError ? (
+              <div className="profile-card__alert profile-card__alert--error">{assignedMissionsError}</div>
+            ) : null}
+
+            {isLoadingAssignedMissions ? (
+              <div className="profile-missions__empty">Chargement des missions affectees...</div>
+            ) : assignedMissions.length === 0 ? (
+              <div className="profile-missions__empty">Aucune mission affectee pour le moment.</div>
+            ) : (
+              <div className="profile-missions__list">
+                {assignedMissions.map((mission) => (
+                  <article key={mission.Id || mission.CodeMission} className="profile-mission-card">
+                    <div className="profile-mission-card__head">
+                      <div>
+                        <p className="profile-mission-card__eyebrow">Mission affectee</p>
+                        <h4>{missionCodeLabel(mission)}</h4>
+                      </div>
+                      <span className={getMissionStatusClass(mission.Statut || mission.statut)}>
+                        {normalizeText(mission.Statut || mission.statut) || "Planifiee"}
+                      </span>
+                    </div>
+
+                    <div className="profile-mission-card__summary">
+                      <span>{toDisplayDate(mission.DateMission || mission.date)}</span>
+                      <span>{`${normalizeText(mission.Gouvernorat) || "Non renseigne"} - ${normalizeText(mission.Delegation) || "Non renseignee"}`}</span>
+                    </div>
+
+                    <div className="profile-mission-card__grid">
+                      <div className="profile-mission-card__item">
+                        <span>Transport</span>
+                        <strong>{normalizeText(mission.Transport || mission.transport) || "Non renseigne"}</strong>
+                      </div>
+                      <div className="profile-mission-card__item">
+                        <span>Objectif</span>
+                        <strong>{normalizeText(mission.Objectif || mission.objectif) || "Non renseigne"}</strong>
+                      </div>
+                      <div className="profile-mission-card__item">
+                        <span>Creee par</span>
+                        <strong>{normalizeText(mission.CreeParNom || mission.createdBy) || "Non renseigne"}</strong>
+                      </div>
+                    </div>
+
+                    {normalizeText(mission.Observations || mission.observations) ? (
+                      <div className="profile-mission-card__note">
+                        <span>Observations</span>
+                        <p>{normalizeText(mission.Observations || mission.observations)}</p>
+                      </div>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+
+        <aside className="profile-dashboard__side">
+          <section className="profile-card">
+            <div className="profile-card__head">
+              <div>
+                <h3 className="profile-card__title">Securite</h3>
+                <p className="profile-card__subtitle">Gerez la securite du compte et l'etat de la session.</p>
+              </div>
+              {!isEditingSecurity ? (
+                <button type="button" className="profile-card__action" onClick={handleSecurityToggle}>
+                  Modifier
+                </button>
+              ) : null}
+            </div>
+
+            {passwordError ? <div className="profile-card__alert profile-card__alert--error">{passwordError}</div> : null}
+            {passwordSuccess ? <div className="profile-card__alert profile-card__alert--success">{passwordSuccess}</div> : null}
+
             {!isEditingSecurity ? (
-              <button type="button" className="profile-card__action" onClick={handleSecurityToggle}>
-                Modifier
-              </button>
-            ) : null}
-          </div>
-          <div>
-            <p className="profile-card__subtitle">Gerez la securite du compte et l'etat de la session.</p>
-          </div>
-
-        {passwordError ? <div className="profile-card__alert profile-card__alert--error">{passwordError}</div> : null}
-        {passwordSuccess ? <div className="profile-card__alert profile-card__alert--success">{passwordSuccess}</div> : null}
-
-        {!isEditingSecurity ? (
-          <>
-            <div className="profile-card__rows">
-              <div className="profile-card__row">
-                <span>Mot de passe</span>
-                <strong>********</strong>
-              </div>
-              <div className="profile-card__row">
-                <span>Session</span>
-                <strong>Connecte</strong>
-              </div>
-              <div className="profile-card__row">
-                <span>Acces foyer</span>
-                <strong>{accesFoyerLabel}</strong>
-              </div>
-            </div>
-
-            <div className="profile-card__permissions">
-              {permissions.map((perm) => (
-                <div key={perm} className="profile-card__permission">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  {perm}
+              <div className="profile-card__rows">
+                <div className="profile-card__row">
+                  <span>Mot de passe</span>
+                  <strong>********</strong>
                 </div>
-              ))}
-            </div>
-          </>
-        ) : (
-          <form className="profile-password-form" onSubmit={handlePasswordSubmit}>
-            <label>
-              <span>Mot de passe actuel</span>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-              />
-            </label>
+                <div className="profile-card__row">
+                  <span>Session</span>
+                  <strong>Connecte</strong>
+                </div>
+              </div>
+            ) : (
+              <form className="profile-password-form" onSubmit={handlePasswordSubmit}>
+                <label>
+                  <span>Mot de passe actuel</span>
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(event) => setCurrentPassword(event.target.value)}
+                  />
+                </label>
 
-            <label>
-              <span>Nouveau mot de passe</span>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-              />
-            </label>
+                <label>
+                  <span>Nouveau mot de passe</span>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                  />
+                </label>
 
-            <label>
-              <span>Confirmer le nouveau mot de passe</span>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-              />
-            </label>
+                <label>
+                  <span>Confirmer le nouveau mot de passe</span>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                  />
+                </label>
 
-            <div className="profile-password-form__actions">
-              <button type="submit" className="profile-card__action" disabled={isSubmitting}>
-                {isSubmitting ? "Mise a jour..." : "Mettre a jour"}
-              </button>
-              <button type="button" className="profile-card__action profile-card__action--ghost" onClick={handleSecurityCancel}>
-                Annuler
-              </button>
-            </div>
-          </form>
-        )}
-      </section>
+                <div className="profile-password-form__actions">
+                  <button type="submit" className="profile-card__action" disabled={isSubmitting}>
+                    {isSubmitting ? "Mise a jour..." : "Mettre a jour"}
+                  </button>
+                  <button type="button" className="profile-card__action profile-card__action--ghost" onClick={handleSecurityCancel}>
+                    Annuler
+                  </button>
+                </div>
+              </form>
+            )}
+          </section>
+        </aside>
       </div>
     </div>
   );

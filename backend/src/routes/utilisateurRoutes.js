@@ -12,6 +12,6 @@ router.use(requireRole([ROLE_ADMIN]));
 router.get("/", utilisateurController.listUtilisateurs);
 router.post("/", utilisateurController.createUtilisateur);
 router.put("/:id", utilisateurController.updateUtilisateur);
-router.delete("/:id", utilisateurController.deactivateUtilisateur);
+router.delete("/:id", utilisateurController.deleteUtilisateur);
 
 module.exports = router;

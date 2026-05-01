@@ -415,6 +415,13 @@
   margin-top: auto;
 }
 
+.employee-card__hint {
+  margin: -4px 0 0;
+  color: var(--employees-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .employees-button {
   border: none;
   border-radius: 16px;
@@ -489,6 +496,10 @@
   border: 1px solid rgba(148, 163, 184, 0.18);
   box-shadow: 0 28px 60px rgba(15, 23, 42, 0.22);
   overflow: hidden;
+}
+
+.employees-modal--confirm {
+  width: min(100%, 470px);
 }
 
 .employees-modal__header {
@@ -575,6 +586,38 @@
   margin-top: 6px;
 }
 
+.employees-form__actions--confirm {
+  margin-top: 0;
+}
+
+.employees-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 0 24px 24px;
+}
+
+.employees-confirm__user {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #fbfdff 0%, #f8fbff 100%);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.employees-confirm__user strong {
+  color: var(--employees-text);
+  font-size: 16px;
+}
+
+.employees-confirm__user span {
+  color: var(--employees-muted);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 960px) {
   .employees-hero,
   .employees-toolbar,
@@ -633,7 +676,8 @@
   }
 
   .employees-modal__header,
-  .employees-form {
+  .employees-form,
+  .employees-confirm {
     padding-left: 18px;
     padding-right: 18px;
   }

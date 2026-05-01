@@ -34,7 +34,12 @@ exports.listerCandidats = async (_req, res) => {
                 CASE WHEN COL_LENGTH('dbo.candidats', 'statut') IS NULL THEN 0 ELSE 1 END AS has_statut,
                 CASE WHEN COL_LENGTH('dbo.candidats', 'age') IS NULL THEN 0 ELSE 1 END AS has_age,
                 CASE WHEN COL_LENGTH('dbo.candidats', 'niveau_scolaire') IS NULL THEN 0 ELSE 1 END AS has_niveau_scolaire,
-                CASE WHEN COL_LENGTH('dbo.candidats', 'adresse') IS NULL THEN 0 ELSE 1 END AS has_adresse;
+                CASE WHEN COL_LENGTH('dbo.candidats', 'adresse') IS NULL THEN 0 ELSE 1 END AS has_adresse,
+                CASE WHEN COL_LENGTH('dbo.candidats', 'contrat_signe') IS NULL THEN 0 ELSE 1 END AS has_contrat_signe,
+                CASE WHEN COL_LENGTH('dbo.candidats', 'dossier_valide') IS NULL THEN 0 ELSE 1 END AS has_dossier_valide,
+                CASE WHEN COL_LENGTH('dbo.candidats', 'date_signature') IS NULL THEN 0 ELSE 1 END AS has_date_signature,
+                CASE WHEN COL_LENGTH('dbo.candidats', 'type_contrat') IS NULL THEN 0 ELSE 1 END AS has_type_contrat,
+                CASE WHEN COL_LENGTH('dbo.candidats', 'statut_contrat') IS NULL THEN 0 ELSE 1 END AS has_statut_contrat;
         `);
 
         const metadata = meta.recordset?.[0] || {};
@@ -58,6 +63,11 @@ exports.listerCandidats = async (_req, res) => {
                 ${metadata.has_age ? "age" : "CAST(NULL AS INT) AS age"},
                 ${metadata.has_niveau_scolaire ? "niveau_scolaire" : "CAST(NULL AS VARCHAR(255)) AS niveau_scolaire"},
                 ${metadata.has_adresse ? "adresse" : "CAST(NULL AS VARCHAR(255)) AS adresse"},
+                ${metadata.has_contrat_signe ? "contrat_signe" : "CAST(0 AS BIT) AS contrat_signe"},
+                ${metadata.has_dossier_valide ? "dossier_valide" : "CAST(0 AS BIT) AS dossier_valide"},
+                ${metadata.has_date_signature ? "date_signature" : "CAST(NULL AS DATETIME) AS date_signature"},
+                ${metadata.has_type_contrat ? "type_contrat" : "CAST(NULL AS VARCHAR(30)) AS type_contrat"},
+                ${metadata.has_statut_contrat ? "statut_contrat" : "CAST(NULL AS VARCHAR(30)) AS statut_contrat"},
                 genre
             FROM dbo.candidats
             ORDER BY id DESC;
@@ -245,5 +255,27 @@ exports.updateEtape = async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).send(err.message);
+    }
+};
+
+exports.signerContratCandidat = async (req, res) => {
+    try {
+        const candidatId = Number.parseInt(req.params.id, 10);
+        const typeContrat = readTrimmed(req.body, "typeContrat", "type_contrat");
+
+        const result = await candidatModel.signerContratCandidat(candidatId, typeContrat);
+
+        return res.json({
+            ok: true,
+            message: "Contrat signe avec succes.",
+            ...result,
+        });
+    } catch (err) {
+        console.error("Erreur signerContratCandidat:", err);
+        const status = Number.isInteger(err?.status) ? err.status : 500;
+        return res.status(status).json({
+            ok: false,
+            message: err?.message || "Signature contrat impossible.",
+        });
     }
 };
