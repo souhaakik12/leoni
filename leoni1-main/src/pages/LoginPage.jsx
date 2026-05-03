@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
-import leonLogo from "../assets/leon-logo.svg";
 import {
   ROLE_ADMIN,
   ROLE_RECRUTEUR,
@@ -65,7 +64,7 @@ export default function LoginPage() {
       <div className="login-shell">
         <section className="login-left">
           <div className="login-brand">
-            <img src={leonLogo} alt="LEON" />
+            <div className="login-brand-title">LEONI</div>
             <p>Wiring Systems Tunisia</p>
           </div>
         </section>

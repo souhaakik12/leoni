@@ -219,15 +219,115 @@ async function updateCandidat(id, data) {
 }
 
 async function deleteCandidat(id) {
-    const pool = await sql.connect(config);
-    const result = await pool.request()
-        .input("id", sql.Int, id)
-        .query(`
-            DELETE FROM dbo.candidats
-            WHERE id = @id;
-        `);
+    const normalizedId = Number(id);
+    if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
+        throw new CandidatContractError("Identifiant candidat invalide.", 400);
+    }
 
-    return Number(result.rowsAffected?.[0] || 0) > 0;
+    const pool = await sql.connect(config);
+    const transaction = new sql.Transaction(pool);
+
+    try {
+        await transaction.begin();
+
+        const candidatResult = await transaction.request()
+            .input("id", sql.Int, normalizedId)
+            .query(`
+                SELECT TOP 1
+                    id
+                FROM dbo.candidats
+                WHERE id = @id;
+            `);
+
+        const candidat = candidatResult.recordset?.[0] || null;
+        if (!candidat) {
+            await transaction.rollback();
+            return { deleted: false, notFound: true };
+        }
+
+        const contractGuardResult = await transaction.request()
+            .input("id", sql.Int, normalizedId)
+            .query(`
+                DECLARE @hasSignedContract BIT = 0;
+
+                IF COL_LENGTH('dbo.candidats', 'contrat_signe') IS NOT NULL
+                   AND EXISTS (
+                       SELECT 1
+                       FROM dbo.candidats
+                       WHERE id = @id
+                         AND ISNULL(contrat_signe, 0) = 1
+                   )
+                BEGIN
+                    SET @hasSignedContract = 1;
+                END
+
+                IF @hasSignedContract = 0
+                   AND OBJECT_ID('dbo.contrats', 'U') IS NOT NULL
+                   AND EXISTS (
+                       SELECT 1
+                       FROM dbo.contrats
+                       WHERE candidat_id = @id
+                   )
+                BEGIN
+                    SET @hasSignedContract = 1;
+                END
+
+                SELECT @hasSignedContract AS has_signed_contract;
+            `);
+
+        if (Boolean(contractGuardResult.recordset?.[0]?.has_signed_contract)) {
+            throw new CandidatContractError(
+                "Ce candidat est deja lie a un contrat signe. Suppression impossible.",
+                409
+            );
+        }
+
+        await transaction.request()
+            .input("id", sql.Int, normalizedId)
+            .query(`
+                IF OBJECT_ID('dbo.documents', 'U') IS NOT NULL
+                   AND OBJECT_ID('dbo.dossiers', 'U') IS NOT NULL
+                BEGIN
+                    DELETE d
+                    FROM dbo.documents d
+                    INNER JOIN dbo.dossiers dos ON d.dossier_id = dos.id
+                    WHERE dos.candidat_id = @id;
+                END
+
+                IF OBJECT_ID('dbo.dossiers', 'U') IS NOT NULL
+                BEGIN
+                    DELETE FROM dbo.dossiers
+                    WHERE candidat_id = @id;
+                END
+
+                IF OBJECT_ID('dbo.test_entretien', 'U') IS NOT NULL
+                BEGIN
+                    DELETE FROM dbo.test_entretien
+                    WHERE candidat_id = @id;
+                END
+
+                IF OBJECT_ID('dbo.SeanceContratCandidat', 'U') IS NOT NULL
+                BEGIN
+                    DELETE FROM dbo.SeanceContratCandidat
+                    WHERE candidat_id = @id;
+                END
+
+                DELETE FROM dbo.candidats
+                WHERE id = @id;
+            `);
+
+        await transaction.commit();
+        return { deleted: true, notFound: false };
+    } catch (error) {
+        try {
+            if (!transaction._aborted) {
+                await transaction.rollback();
+            }
+        } catch (rollbackError) {
+            console.error("Rollback deleteCandidat:", rollbackError);
+        }
+        throw error;
+    }
 }
 
 async function signerContratCandidat(candidatId, typeContrat) {

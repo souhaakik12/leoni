@@ -62,12 +62,14 @@
   z-index: 2;
 }
 
-.login-brand img {
-  width: min(460px, 82%);
-  max-width: 100%;
-  height: auto;
-  display: block;
-  filter: drop-shadow(0 6px 20px rgba(20, 67, 120, 0.16));
+.login-brand-title {
+  color: #174394;
+  font-size: clamp(54px, 7vw, 88px);
+  line-height: 0.95;
+  letter-spacing: 0.04em;
+  font-weight: 900;
+  text-transform: uppercase;
+  text-shadow: 0 6px 20px rgba(20, 67, 120, 0.1);
 }
 
 .login-brand p {
@@ -246,7 +248,27 @@
     min-height: 200px;
   }
 
-  .login-brand img {
-    width: min(320px, 86%);
+  .login-brand {
+    left: 22px;
+    bottom: 22px;
+  }
+}
+
+@media (max-width: 520px) {
+  .login-left {
+    min-height: 190px;
+  }
+
+  .login-brand {
+    left: 16px;
+    bottom: 18px;
+  }
+
+  .login-brand-title {
+    font-size: clamp(42px, 12vw, 62px);
+  }
+
+  .login-brand p {
+    font-size: 12px;
   }
 }

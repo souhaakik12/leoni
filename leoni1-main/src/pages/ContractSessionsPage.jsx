@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useRecrutements } from "../context/RecrutementsContext.jsx";
@@ -21,6 +21,45 @@ function todayIsoDate() {
 
 function seanceStatusLabel(statutSeance) {
   return statutSeance === STATUS_SEANCE_TERMINEE ? "Terminee" : "En cours";
+}
+
+function formatDateSeance(dateValue) {
+  if (!dateValue) return "-";
+
+  const parsedDate = new Date(dateValue);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return String(dateValue);
+  }
+
+  const formatted = parsedDate.toLocaleDateString("fr-FR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+}
+
+function formatHeureSeance(heureValue) {
+  if (!heureValue) return "--:--";
+
+  const raw = String(heureValue).trim();
+  const hhmmMatch = raw.match(/(\d{2}):(\d{2})/);
+  if (hhmmMatch) {
+    return `${hhmmMatch[1]}:${hhmmMatch[2]}`;
+  }
+
+  const parsedAsDate = new Date(raw);
+  if (!Number.isNaN(parsedAsDate.getTime())) {
+    return parsedAsDate.toLocaleTimeString("fr-FR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  }
+
+  return raw;
 }
 
 export default function ContractSessionsPage() {
@@ -105,7 +144,7 @@ export default function ContractSessionsPage() {
 
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(payload?.message || "Creation de seance impossible.");
+        throw new Error(payload?.message || "Creation de séance impossible.");
       }
 
       if (typeof refreshCandidatsFromApi === "function") {
@@ -122,12 +161,12 @@ export default function ContractSessionsPage() {
       const assignedCount = Number(payload?.assigned_count || 0);
       const message =
         assignedCount > 0
-          ? `Seance #${createdId || "?"} creee. ${assignedCount} candidat(s) affecte(s).`
+          ? `Séance #${createdId || "?"} creee. ${assignedCount} candidat(s) affecte(s).`
           : `Seance contrat #${createdId || "?"} creee avec succes.`;
       pushToast(message, "success");
     } catch (error) {
       console.error(error);
-      pushToast(error?.message || "Creation de seance impossible.", "error");
+      pushToast(error?.message || "Creation de séance impossible.", "error");
     }
   };
 
@@ -135,12 +174,12 @@ export default function ContractSessionsPage() {
     const candidateId = Number(manualCandidateId || 0);
     const seanceId = Number(manualSeanceId || 0);
     if (!candidateId || !seanceId) {
-      pushToast("Selectionnez un candidat et une seance en cours.", "error");
+      pushToast("Selectionnez un candidat et une séance en cours.", "error");
       return;
     }
     const result = await assignCandidatToSeance(candidateId, seanceId);
     if (!result?.ok) {
-      pushToast(result?.message || "Affectation impossible (seance terminee ou donnees invalides).", "error");
+      pushToast(result?.message || "Affectation impossible (séance terminée ou donnees invalides).", "error");
       return;
     }
     setManualCandidateId("");
@@ -170,14 +209,14 @@ export default function ContractSessionsPage() {
         return;
       }
       if (result.reason === "empty_session") {
-        pushToast("Aucun candidat dans cette seance.", "error");
+        pushToast("Aucun candidat dans cette séance.", "error");
         return;
       }
       if (result.reason === "session_closed") {
-        pushToast("Cette seance est deja terminee.", "info");
+        pushToast("Cette séance est deja terminée.", "info");
         return;
       }
-      pushToast(result.message || "Action impossible pour cette seance.", "error");
+      pushToast(result.message || "Action impossible pour cette séance.", "error");
       return;
     }
 
@@ -191,14 +230,14 @@ export default function ContractSessionsPage() {
     const successMessage =
       result.updatedCount > 0
         ? `${result.updatedCount} candidat(s) envoye(s) vers dossier contrat.${result.alreadyCount ? ` (${result.alreadyCount} deja traites)` : ""}`
-        : "Seance cloturee. Les candidats etaient deja en attente dossier.";
+        : "Séance clôturée. Les candidats etaient deja en attente dossier.";
     pushToast(successMessage, "success", 2800);
     setTimeout(() => navigate("/contracts/reception"), 900);
   };
 
   const handleResetSeance = async (seance) => {
     const shouldReset = window.confirm(
-      `Confirmer la suppression/reset de la seance #${seance.id} ? Cette action supprime la seance et remet ses candidats en attente seance contrat.`
+      `Confirmer la suppression/reset de la séance #${seance.id} ? Cette action supprime la séance et remet ses candidats en attente séance contrat.`
     );
     if (!shouldReset) return;
 
@@ -212,7 +251,7 @@ export default function ContractSessionsPage() {
 
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(payload?.message || "Reset de seance impossible.");
+        throw new Error(payload?.message || "Reset de séance impossible.");
       }
 
       if (typeof refreshSeancesFromApi === "function") {
@@ -223,10 +262,10 @@ export default function ContractSessionsPage() {
       }
 
       setExpandedSeanceId((prev) => (prev === seance.id ? null : prev));
-      pushToast(payload?.message || `Seance #${seance.id} supprimee et reinitialisee.`, "success", 3000);
+      pushToast(payload?.message || `Séance #${seance.id} supprimee et reinitialisee.`, "success", 3000);
     } catch (error) {
       console.error(error);
-      pushToast(error?.message || "Reset de seance impossible.", "error", 3200);
+      pushToast(error?.message || "Reset de séance impossible.", "error", 3200);
     }
   };
 
@@ -234,56 +273,62 @@ export default function ContractSessionsPage() {
     const isExpanded = expandedSeanceId === seance.id;
     const sentCount = seance.candidats.filter((candidate) => candidate.statut === STATUS_EN_ATTENTE_DOSSIER).length;
     const isTerminee = seance.statutSeance === STATUS_SEANCE_TERMINEE;
+    const totalForProgress = Math.max(seance.candidats.length, 1);
+    const visualProgress = Math.min(100, Math.round((sentCount / totalForProgress) * 100));
 
     return (
-      <article key={seance.id} className={`session-card ${isExpanded ? "is-expanded" : ""}`}>
-        <div className="session-row">
-          <div className="session-row-main">
-            <div className="session-row-identity">
-              <span className="session-kicker">Seance #{seance.id}</span>
-              <h3>{seance.date || "-"} · {seance.heure || "-"}</h3>
+      <article key={seance.id} className={`session-card seance-card ${isExpanded ? "is-expanded" : ""} ${isTerminee ? "is-neutral" : ""}`}>
+        <div className="seance-card-header">
+          <div className="seance-card-title-block">
+            <span className="session-kicker">Séance #{seance.id}</span>
+            <div className="seance-date-block">
+              <div className="seance-date-main">{formatDateSeance(seance.date)}</div>
+              <div className="seance-time-badge">Heure : {formatHeureSeance(seance.heure)}</div>
             </div>
-            <div className="session-row-responsable">
-              <span>Responsable</span>
-              <strong>{seance.responsableNom || "-"}</strong>
-            </div>
+            <p className="seance-card-meta">Responsable: {seance.responsableNom || "-"}</p>
           </div>
-          <div className="session-row-side">
-            <div className="session-inline-stats">
-              <span className="session-inline-badge">{seance.candidats.length} candidat{seance.candidats.length > 1 ? "s" : ""}</span>
-              <span className="session-inline-badge">{sentCount} dossier{sentCount > 1 ? "s" : ""}</span>
-            </div>
+
+          <div className="seance-card-badges">
+            <span className="seance-badge">{seance.candidats.length} candidat{seance.candidats.length > 1 ? "s" : ""}</span>
+            <span className="seance-badge">{sentCount} dossier{sentCount > 1 ? "s" : ""}</span>
             <span className={`status-badge ${isTerminee ? "is-done" : "is-open"}`}>
               {seanceStatusLabel(seance.statutSeance)}
             </span>
-            <div className="session-row-actions">
-              <button
-                type="button"
-                className="btn btn-outline btn-compact"
-                onClick={() => setExpandedSeanceId((prev) => (prev === seance.id ? null : seance.id))}
-              >
-                {isExpanded ? "Masquer details" : "Voir details"}
-              </button>
-              <button
-                type="button"
-                className="btn btn-success btn-compact"
-                onClick={() => handleCloseSeance(seance)}
-                disabled={isTerminee}
-              >
-                Cloturer seance
-              </button>
-              <button type="button" className="btn btn-danger btn-compact" onClick={() => handleResetSeance(seance)}>
-                Supprimer
-              </button>
-            </div>
           </div>
         </div>
 
+        <div className="seance-card-progress" aria-hidden="true">
+          <div className="seance-card-progress-track">
+            <span className="seance-card-progress-fill" style={{ width: `${visualProgress}%` }} />
+          </div>
+        </div>
+
+        <div className="seance-actions">
+          <button
+            type="button"
+            className="btn btn-outline btn-compact"
+            onClick={() => setExpandedSeanceId((prev) => (prev === seance.id ? null : seance.id))}
+          >
+            {isExpanded ? "Masquer details" : "Voir details"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-success btn-compact"
+            onClick={() => handleCloseSeance(seance)}
+            disabled={isTerminee}
+          >
+            Clôturer séance
+          </button>
+          <button type="button" className="btn btn-danger btn-compact" onClick={() => handleResetSeance(seance)}>
+            Supprimer
+          </button>
+        </div>
+
         {isExpanded && (
-          <div className="session-details">
-            {isTerminee && <div className="session-note">Cette seance est terminee.</div>}
+          <div className="session-details seance-card-body">
+            {isTerminee && <div className="session-note">Cette séance est terminée.</div>}
             {seance.candidats.length === 0 ? (
-              <div className="session-empty">Aucun candidat dans cette seance.</div>
+              <div className="session-empty">Aucun candidat dans cette séance.</div>
             ) : (
               <div className="session-table-wrap">
                 <table className="session-table">
@@ -344,27 +389,28 @@ export default function ContractSessionsPage() {
     <div className="seance-page">
       {toast.message && <div className={`seance-toast ${toast.type}`}>{toast.message}</div>}
 
-      <section className="seance-header-card">
+      <section className="seance-header-card seance-hero">
         <div className="seance-header-copy">
-          <span className="seance-header-eyebrow">Organisation RH</span>
+          <span className="seance-header-eyebrow">ORGANISATION RH</span>
           <h1>Séances Contrat</h1>
-          <p>Planifiez les sessions, affectez les candidats et suivez l’avancement des dossiers contrat.</p>
+          <p>Gestion des sessions de signature et affectation des candidats.</p>
         </div>
         <button
           type="button"
-          className={`btn btn-primary ${showCreateForm ? "is-active" : ""}`}
+          className={`btn btn-primary seance-hero-action ${showCreateForm ? "is-active" : ""}`}
           onClick={() => setShowCreateForm((prev) => !prev)}
         >
-          Créer séance
+          <span className="hero-action-icon" aria-hidden="true">+</span>
+          <span>Créer séance</span>
         </button>
       </section>
 
       {showCreateForm && (
-        <section className="seance-create-card">
+        <section className="seance-section seance-create-card">
           <div className="seance-create-head">
             <div>
               <h2>Nouvelle séance</h2>
-              <p>Définissez la date, l’heure et le responsable avant validation.</p>
+              <p>Definissez la date, l'heure et le responsable avant validation.</p>
             </div>
           </div>
           <div className="seance-create-grid">
@@ -404,25 +450,30 @@ export default function ContractSessionsPage() {
         </section>
       )}
 
-      <section className="seance-waiting-card">
+      <section className="seance-section seance-waiting-card">
         <div className="section-title-row">
           <div>
             <h2>Candidats en attente</h2>
-            <p className="section-subtitle">Candidats prêts à être rattachés à une séance en cours.</p>
+            <p className="section-subtitle">Candidats prets a etre rattaches a une séance en cours.</p>
           </div>
-          <span className="section-count">{waitingSeanceCandidates.length}</span>
+          <span className="section-count seance-badge">{waitingSeanceCandidates.length}</span>
         </div>
 
         {waitingSeanceCandidates.length === 0 ? (
-          <div className="waiting-empty-state">
+          <div className="waiting-empty-state empty-state">
+            <span className="empty-state-icon" aria-hidden="true">i</span>
             <strong>Aucun candidat en attente</strong>
-            <span>Les candidats affectables apparaîtront ici automatiquement.</span>
+            <span>Les candidats affectables apparaitront ici automatiquement.</span>
           </div>
         ) : (
-          <ul className="waiting-chip-list">
+          <ul className="waiting-cards-grid">
             {waitingSeanceCandidates.map((candidate) => (
-              <li key={candidate.id} className="waiting-chip">
-                #{candidate.id} {candidate.nomComplet}
+              <li key={candidate.id} className="waiting-candidate-card">
+                <div className="waiting-candidate-name">{candidate.nomComplet || "-"}</div>
+                <div className="waiting-candidate-meta">
+                  <span>#{candidate.id}</span>
+                  <span>{candidate.cin || "CIN -"}</span>
+                </div>
               </li>
             ))}
           </ul>
@@ -462,36 +513,41 @@ export default function ContractSessionsPage() {
       </section>
 
       <section className="session-groups">
-        <div className="session-group">
+        <div className="session-group seance-section">
           <div className="group-head">
             <div>
               <h2>Sessions en cours</h2>
-              <p>Sessions actives en attente de clôture et d’envoi vers dossier.</p>
+              <p>Sessions actives en attente de cloture et d'envoi vers dossier.</p>
             </div>
-            <span>{openSeances.length}</span>
+            <span className="seance-badge">{openSeances.length}</span>
           </div>
           {openSeances.length === 0 ? (
-            <div className="session-empty-card">Aucune session en cours.</div>
+            <div className="session-empty-card empty-state">Aucune session en cours.</div>
           ) : (
-            <div className="session-card-list">{openSeances.map((seance) => renderSessionCard(seance))}</div>
+            <div className="session-card-list seance-grid">{openSeances.map((seance) => renderSessionCard(seance))}</div>
           )}
         </div>
 
-        <div className="session-group">
+        <div className="session-group seance-section">
           <div className="group-head">
             <div>
               <h2>Sessions terminées</h2>
               <p>Historique des séances déjà clôturées.</p>
             </div>
-            <span>{doneSeances.length}</span>
+            <span className="seance-badge">{doneSeances.length}</span>
           </div>
           {doneSeances.length === 0 ? (
-            <div className="session-empty-card">Aucune session terminee.</div>
+            <div className="session-empty-card empty-state">Aucune session terminée.</div>
           ) : (
-            <div className="session-card-list">{doneSeances.map((seance) => renderSessionCard(seance))}</div>
+            <div className="session-card-list seance-grid">{doneSeances.map((seance) => renderSessionCard(seance))}</div>
           )}
         </div>
       </section>
     </div>
   );
 }
+
+
+
+
+

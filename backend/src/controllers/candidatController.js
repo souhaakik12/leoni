@@ -222,14 +222,18 @@ exports.deleteCandidat = async (req, res) => {
 
         const deleted = await candidatModel.deleteCandidat(id);
 
-        if (!deleted) {
+        if (!deleted?.deleted) {
             return res.status(404).json({ message: "Candidat introuvable." });
         }
 
-        return res.json({ message: "Candidat supprime avec succes." });
+        return res.json({
+            success: true,
+            message: "Candidat supprime avec succes.",
+        });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ message: err.message || "Suppression candidat impossible." });
+        const status = Number.isInteger(err?.status) ? err.status : 500;
+        res.status(status).json({ message: err.message || "Suppression candidat impossible." });
     }
 };
 

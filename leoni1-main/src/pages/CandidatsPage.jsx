@@ -351,11 +351,13 @@ export default function CandidatsPage() {
   const [submissionMessage, setSubmissionMessage] = useState("");
 
   const [showCreate, setShowCreate] = useState(false);
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState({ message: "", type: "success" });
   const [editCandidateId, setEditCandidateId] = useState(null);
   const [editForm, setEditForm] = useState(() => buildCandidateFormValues());
   const [editErrors, setEditErrors] = useState({});
   const [editMessage, setEditMessage] = useState("");
+  const [candidateToDelete, setCandidateToDelete] = useState(null);
+  const [isDeletingCandidate, setIsDeletingCandidate] = useState(false);
 
   const fetchCandidats = async () => {
     try {
@@ -422,9 +424,13 @@ export default function CandidatsPage() {
 
   const lane = { ...currentType, items: filtered };
 
-  const pushToast = (message, timeout = 2200) => {
-    setToast(message);
-    setTimeout(() => setToast(""), timeout);
+  const pushToast = (message, type = "success", timeout = 2200) => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast((current) =>
+        current.message === message ? { message: "", type: "success" } : current
+      );
+    }, timeout);
   };
 
   const updateCandidat = (updated) => {
@@ -688,14 +694,25 @@ if (!response.ok) {
     }
   };
 
-  const handleDeleteCandidate = async (candidate) => {
-    const confirmed = window.confirm(`Supprimer le candidat ${candidate.nomComplet} ?`);
-    if (!confirmed) {
+  const openDeleteCandidateModal = (candidate) => {
+    setCandidateToDelete(candidate);
+  };
+
+  const closeDeleteCandidateModal = () => {
+    if (isDeletingCandidate) {
+      return;
+    }
+    setCandidateToDelete(null);
+  };
+
+  const handleDeleteCandidate = async () => {
+    if (!candidateToDelete?.id) {
       return;
     }
 
     try {
-      const response = await fetch(`http://localhost:3000/api/candidats/${candidate.id}`, {
+      setIsDeletingCandidate(true);
+      const response = await fetch(`http://localhost:3000/api/candidats/${candidateToDelete.id}`, {
         method: "DELETE",
       });
 
@@ -704,23 +721,57 @@ if (!response.ok) {
         throw new Error(result?.message || "Erreur lors de la suppression du candidat.");
       }
 
-      removeCandidateFromState(candidate.id);
+      await fetchCandidats();
       if (typeof refreshCandidatsFromApi === "function") {
         await refreshCandidatsFromApi();
       }
-      if (editCandidateId === candidate.id) {
+      if (editCandidateId === candidateToDelete.id) {
         cancelEditCandidate();
       }
-      pushToast("Candidat supprime avec succes.");
+      setCandidateToDelete(null);
+      pushToast("Candidat supprimé avec succès.", "success");
     } catch (error) {
       const message = error?.message || "Erreur reseau lors de la suppression.";
-      pushToast(message);
+      pushToast(message, "error", 3200);
+    } finally {
+      setIsDeletingCandidate(false);
     }
   };
 
   return (
     <div className="cand-page">
-      {toast && <div className="cand-toast success">{toast}</div>}
+      {toast.message && <div className={`cand-toast ${toast.type}`}>{toast.message}</div>}
+
+      {candidateToDelete && (
+        <div className="cand-modal-overlay" role="presentation" onClick={closeDeleteCandidateModal}>
+          <div
+            className="cand-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cand-delete-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="cand-modal-head">
+              <h3 id="cand-delete-title">Confirmer la suppression</h3>
+            </div>
+            <div className="cand-modal-body">
+              <p>Voulez-vous vraiment supprimer ce candidat ? Cette action est définitive.</p>
+              <div className="cand-modal-candidate">
+                <strong>{candidateToDelete.nomComplet || "-"}</strong>
+                <span>CIN : {candidateToDelete.cin || "-"}</span>
+              </div>
+            </div>
+            <div className="cand-modal-actions">
+              <button type="button" className="cand-modal-cancel" onClick={closeDeleteCandidateModal} disabled={isDeletingCandidate}>
+                Annuler
+              </button>
+              <button type="button" className="cand-modal-confirm" onClick={handleDeleteCandidate} disabled={isDeletingCandidate}>
+                {isDeletingCandidate ? "Suppression..." : "Confirmer la suppression"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="cand-header">
         <div>
@@ -1264,7 +1315,7 @@ if (!response.ok) {
                           Consulter dossier
                         </button>
                       )}
-                      <button className="delete-link" onClick={() => handleDeleteCandidate(c)}>
+                      <button type="button" className="delete-link" onClick={() => openDeleteCandidateModal(c)}>
                         Supprimer
                       </button>
                     </div>
