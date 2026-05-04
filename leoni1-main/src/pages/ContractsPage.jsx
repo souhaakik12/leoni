@@ -106,6 +106,7 @@ function getCompactPagination(currentPage, totalPages) {
 function mapContractRow(contract, index) {
   return {
     id: contract.id_contrat ?? contract.id ?? `contract-${contract.cin || "row"}-${index + 1}`,
+    idContrat: contract.id_contrat ?? contract.id ?? null,
     cin: String(contract.cin ?? "").trim() || "-",
     nomPrenom: contract.nom_prenom ?? contract.nomPrenom ?? "-",
     genre: contract.genre ?? "-",
@@ -122,6 +123,7 @@ function mapContractRow(contract, index) {
     joursRestantsAffichage:
       contract.jours_restants_affichage ?? contract.joursRestantsAffichage ?? "",
     alerte: contract.alerte ?? "",
+    sourceDonnee: contract.source_donnee ?? contract.sourceDonnee ?? "",
   };
 }
 
@@ -340,7 +342,12 @@ function AlertBadge({ contract }) {
   return <span className={`contracts-badge is-alert-${alertState.tone}`}>{alertState.label}</span>;
 }
 
-function ActionMenu({ alertMode = false }) {
+function isRenewableContract(contract) {
+  const normalizedAlert = normalizeText(contract?.alerte);
+  return normalizedAlert === "expire" || normalizedAlert === "proche expiration";
+}
+
+function ActionMenu({ alertMode = false, disabled = false, loading = false, onRenew }) {
   return (
     <div className={`contracts-table__actions ${alertMode ? "is-alerts" : ""}`.trim()}>
       <button
@@ -348,8 +355,11 @@ function ActionMenu({ alertMode = false }) {
         className={`contracts-action ${
           alertMode ? "contracts-action--inline-alert" : "contracts-action--inline-secondary"
         }`}
+        onClick={onRenew}
+        disabled={disabled || loading}
+        title={disabled ? "Ce contrat n'est pas eligible au renouvellement." : ""}
       >
-        Renouveler
+        {loading ? "Renouvellement..." : "Renouveler"}
       </button>
     </div>
   );
@@ -365,6 +375,8 @@ export default function ContractsPage() {
   const [contractsTotal, setContractsTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [renewingContractId, setRenewingContractId] = useState(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const normalizedSearch = search.trim();
 
@@ -438,7 +450,7 @@ export default function ContractsPage() {
       ignore = true;
       controller.abort();
     };
-  }, [user, normalizedSearch]);
+  }, [user, normalizedSearch, reloadKey]);
 
   const alertContracts = useMemo(
     () =>
@@ -476,6 +488,43 @@ export default function ContractsPage() {
 
   const totalLabel = tab === TAB_ALERTS ? "alertes affichees" : "contrats affiches";
   const summaryLabel = tab === TAB_ALERTS ? "alertes affichees" : "contrats affiches";
+
+  const handleRenewContract = async (contract) => {
+    if (!contract || !isRenewableContract(contract)) {
+      window.alert("Ce contrat n’est pas éligible au renouvellement.");
+      return;
+    }
+
+    if (!contract.idContrat || !contract.sourceDonnee) {
+      window.alert("Impossible de renouveler : identifiant ou source du contrat manquant.");
+      return;
+    }
+
+    setRenewingContractId(contract.id);
+    try {
+      const response = await fetch(`${CONTRACTS_API_ENDPOINT}/${contract.idContrat}/renouveler`, {
+        method: "POST",
+        headers: buildRoleHeaders(user, {
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          source_donnee: contract.sourceDonnee,
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.message || "Impossible de renouveler le contrat.");
+      }
+
+      setReloadKey((value) => value + 1);
+    } catch (renewError) {
+      console.error("Erreur renouvellement contrat:", renewError);
+      window.alert(renewError?.message || "Impossible de renouveler le contrat.");
+    } finally {
+      setRenewingContractId(null);
+    }
+  };
 
   return (
     <div className="contracts-page">
@@ -624,7 +673,11 @@ export default function ContractsPage() {
                         <AlertBadge contract={contract} />
                       </td>
                       <td>
-                        <ActionMenu />
+                        <ActionMenu
+                          disabled={!isRenewableContract(contract)}
+                          loading={renewingContractId === contract.id}
+                          onRenew={() => void handleRenewContract(contract)}
+                        />
                       </td>
                     </tr>
                   ))
@@ -721,7 +774,12 @@ export default function ContractsPage() {
                             <AlertBadge contract={contract} />
                           </td>
                           <td>
-                            <ActionMenu alertMode />
+                            <ActionMenu
+                              alertMode
+                              disabled={!isRenewableContract(contract)}
+                              loading={renewingContractId === contract.id}
+                              onRenew={() => void handleRenewContract(contract)}
+                            />
                           </td>
                         </tr>
                       ))

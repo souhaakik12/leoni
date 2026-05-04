@@ -8,5 +8,6 @@ const router = express.Router();
 router.use(requireRole(CONTRACT_ALLOWED_ROLES));
 
 router.get("/", controller.getContrats);
+router.post("/:id/renouveler", controller.renouvelerContrat);
 
 module.exports = router;

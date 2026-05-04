@@ -25,3 +25,20 @@ exports.getContrats = async (req, res) => {
         return handleError(res, error, "Impossible de charger les contrats.");
     }
 };
+
+exports.renouvelerContrat = async (req, res) => {
+    try {
+        const result = await contratModel.renouvelerContrat(
+            req.params.id,
+            req.body?.source_donnee
+        );
+
+        return res.json({
+            ok: true,
+            message: "Contrat renouvelé avec succès.",
+            ...result,
+        });
+    } catch (error) {
+        return handleError(res, error, "Impossible de renouveler le contrat.");
+    }
+};
