@@ -1,5 +1,10 @@
 const residentModel = require("../models/residentModel");
 
+const MIN_RESIDENT_AGE = 18;
+const MAX_RESIDENT_AGE = 99;
+const TWO_DIGITS_REGEX = /^\d{2}$/;
+// Option: passer à true si vous voulez bloquer aussi les matricules déjà utilisés par des résidentes quittées.
+const BLOCK_DUPLICATE_MATRICULE_FOR_QUITTEE_HISTORY = false;
 const NEXT_MONTH_COTISATION = 60;
 const ONE_MONTH_DAYS = 30;
 
@@ -133,6 +138,19 @@ function hasNonEmptyText(value) {
     return String(value ?? "").trim() !== "";
 }
 
+function validateResidentAge(ageValue) {
+    const ageText = String(ageValue ?? "").trim();
+    if (!ageText) return "L\u2019\u00e2ge doit \u00eatre compris entre 18 et 99 ans";
+    if (!TWO_DIGITS_REGEX.test(ageText)) return "L\u2019\u00e2ge doit \u00eatre compris entre 18 et 99 ans";
+
+    const ageNumber = Number(ageText);
+    if (!Number.isInteger(ageNumber) || ageNumber < MIN_RESIDENT_AGE || ageNumber > MAX_RESIDENT_AGE) {
+        return "L\u2019\u00e2ge doit \u00eatre compris entre 18 et 99 ans";
+    }
+
+    return "";
+}
+
 function validateCreateResidentInput(input, normalizedData) {
     if (!hasNonEmptyText(input.nom_complet)) return "nom_complet is required";
     if (!hasNonEmptyText(input.matricule)) return "matricule is required";
@@ -141,6 +159,8 @@ function validateCreateResidentInput(input, normalizedData) {
     if (!hasNonEmptyText(input.type)) return "type is required";
     if (!normalizedData.date_entree) return "date_entree is required and must be yyyy-mm-dd";
     if (!normalizedData.foyer_id) return "foyer_id is required";
+    const ageError = validateResidentAge(input.age);
+    if (ageError) return ageError;
     return "";
 }
 
@@ -171,6 +191,18 @@ async function createResident(req, res) {
             return res.status(400).json({ message: validationError });
         }
 
+        if (normalized.data.type === "nouvelle") {
+            const existingActiveResident = await residentModel.findActiveResidentByMatricule(
+                normalized.data.matricule,
+                { includeQuitteeHistory: BLOCK_DUPLICATE_MATRICULE_FOR_QUITTEE_HISTORY }
+            );
+            if (existingActiveResident) {
+                return res.status(400).json({
+                    message: "Ce matricule existe déjà pour une résidente active.",
+                });
+            }
+        }
+
         const resident = await residentModel.createResident(normalized.data);
         return res.status(201).json(resident || { message: "Resident ajoute" });
     } catch (err) {
@@ -187,6 +219,11 @@ async function updateResident(req, res) {
         const id = Number(req.params.id);
         if (Number.isNaN(id)) {
             return res.status(400).json({ message: "Invalid resident id" });
+        }
+
+        const ageError = validateResidentAge(req.body?.age);
+        if (ageError) {
+            return res.status(400).json({ message: ageError });
         }
 
         const normalized = normalizeResidentPayload(req.body, { defaultType: "nouvelle" });

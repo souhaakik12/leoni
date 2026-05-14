@@ -32,13 +32,51 @@ function normalizeText(value) {
   return String(value).trim();
 }
 
-function toDisplayDate(value) {
+function normalizeComparableText(value) {
+  return normalizeText(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function pad2(value) {
+  return String(value).padStart(2, "0");
+}
+
+function toIsoDate(value) {
   const raw = normalizeText(value);
-  if (!raw) return "Non renseignee";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    const [year, month, day] = raw.split("-");
+  if (!raw) return "";
+
+  const isoMatch = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoMatch) {
+    return isoMatch[1];
+  }
+
+  const frMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (frMatch) {
+    return `${frMatch[3]}-${frMatch[2]}-${frMatch[1]}`;
+  }
+
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function todayIso() {
+  const now = new Date();
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+}
+
+function toDisplayDate(value) {
+  const isoDate = toIsoDate(value);
+  if (isoDate) {
+    const [year, month, day] = isoDate.split("-");
     return `${day}/${month}/${year}`;
   }
+
+  const raw = normalizeText(value);
+  if (!raw) return "Non renseignee";
 
   const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})T/);
   if (isoMatch) {
@@ -49,10 +87,7 @@ function toDisplayDate(value) {
 }
 
 function normalizeMissionStatus(value) {
-  return normalizeText(value)
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+  return normalizeComparableText(value);
 }
 
 function getMissionStatusClass(value) {
@@ -60,6 +95,65 @@ function getMissionStatusClass(value) {
   if (normalized === "terminee") return "profile-mission-card__status profile-mission-card__status--done";
   if (normalized === "en cours") return "profile-mission-card__status profile-mission-card__status--progress";
   return "profile-mission-card__status profile-mission-card__status--planned";
+}
+
+function getPotentialCandidatesCount(mission) {
+  const directValue = mission?.NombreCandidatsPotentiels ?? mission?.nombreCandidatsPotentiels;
+  if (directValue !== undefined && directValue !== null && directValue !== "") {
+    const parsed = Number(directValue);
+    if (Number.isInteger(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  const rawResult = normalizeText(mission?.ResultatMission || mission?.resultatMission);
+  const normalizedResult = normalizeComparableText(rawResult);
+  if (/^\d+$/.test(normalizedResult)) {
+    return Number(normalizedResult);
+  }
+
+  if (!normalizedResult.includes("resultat saisi") && !normalizedResult.includes("candidat")) {
+    return null;
+  }
+
+  const match = rawResult.match(/(\d+)/);
+  if (!match) return null;
+
+  const parsed = Number(match[1]);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function hasMissionResult(mission) {
+  if (getPotentialCandidatesCount(mission) !== null) {
+    return true;
+  }
+
+  return normalizeComparableText(mission?.ResultatMission || mission?.resultatMission).includes("resultat saisi");
+}
+
+function getMissionDisplayStatus(mission) {
+  if (hasMissionResult(mission)) return "Termin\u00e9e";
+
+  const rawDate = mission?.DateMission || mission?.date || mission?.dateMission;
+  if (!rawDate) {
+    return mission?.statutAffichage || mission?.Statut || mission?.statut || "Planifi\u00e9e";
+  }
+
+  const missionDate = toIsoDate(rawDate);
+  const today = todayIso();
+
+  if (!missionDate) {
+    return mission?.statutAffichage || mission?.Statut || mission?.statut || "Planifi\u00e9e";
+  }
+
+  if (missionDate < today) return "Termin\u00e9e";
+  if (missionDate === today) return "En cours";
+  return "Planifi\u00e9e";
+}
+
+function canSubmitMissionResult(mission) {
+  const missionDate = toIsoDate(mission?.DateMission || mission?.date || mission?.dateMission);
+  return Boolean(missionDate) && missionDate <= todayIso();
 }
 
 function missionCodeLabel(mission) {
@@ -83,6 +177,69 @@ function getInitials(name) {
     .join("");
 }
 
+function MissionResultModal({ mission, form, error, saving, onChange, onClose, onSubmit }) {
+  return (
+    <div className="profile-modal-backdrop" role="presentation" onClick={saving ? undefined : onClose}>
+      <div
+        className="profile-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mission-result-modal-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="profile-modal__head">
+          <div>
+            <p className="profile-modal__eyebrow">Mission affectee</p>
+            <h3 id="mission-result-modal-title">Saisir resultat - {missionCodeLabel(mission)}</h3>
+            <p className="profile-modal__subtitle">
+              {toDisplayDate(mission?.DateMission || mission?.date)} - {normalizeText(mission?.Gouvernorat) || "Non renseigne"} - {normalizeText(mission?.Delegation) || "Non renseignee"}
+            </p>
+          </div>
+
+          <button type="button" className="profile-modal__close" onClick={onClose} disabled={saving} aria-label="Fermer la fenetre">
+            &times;
+          </button>
+        </div>
+
+        {error ? <div className="profile-card__alert profile-card__alert--error">{error}</div> : null}
+
+        <form className="profile-modal__form" onSubmit={onSubmit}>
+          <label className="profile-modal__field">
+            <span>Nombre de candidats potentiels</span>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={form.NombreCandidatsPotentiels}
+              onChange={(event) => onChange("NombreCandidatsPotentiels", event.target.value)}
+              placeholder="Ex: 18"
+            />
+          </label>
+
+          <label className="profile-modal__field">
+            <span>Observations</span>
+            <textarea
+              rows="4"
+              value={form.Observations}
+              onChange={(event) => onChange("Observations", event.target.value)}
+              placeholder="Commentaires ou retours de mission..."
+            />
+          </label>
+
+          <div className="profile-modal__footer">
+            <button type="button" className="profile-card__action profile-card__action--ghost" onClick={onClose} disabled={saving}>
+              Annuler
+            </button>
+            <button type="submit" className="profile-card__action" disabled={saving}>
+              {saving ? "Enregistrement..." : "Enregistrer"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   const { user, updateUser } = useAuth();
   const userId = user?.Id || user?.id;
@@ -101,7 +258,15 @@ export default function ProfilePage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [assignedMissions, setAssignedMissions] = useState([]);
   const [assignedMissionsError, setAssignedMissionsError] = useState("");
+  const [assignedMissionsSuccess, setAssignedMissionsSuccess] = useState("");
   const [isLoadingAssignedMissions, setIsLoadingAssignedMissions] = useState(false);
+  const [resultMission, setResultMission] = useState(null);
+  const [resultError, setResultError] = useState("");
+  const [isSavingResult, setIsSavingResult] = useState(false);
+  const [resultForm, setResultForm] = useState({
+    NombreCandidatsPotentiels: "",
+    Observations: "",
+  });
   const normalizedRole = normalizeRole(user?.role);
   const info = roleInfo[normalizedRole] || {};
   const displayName = user?.NomComplet || user?.nom;
@@ -132,6 +297,7 @@ export default function ProfilePage() {
       if (isMounted) {
         setIsLoadingAssignedMissions(true);
         setAssignedMissionsError("");
+        setAssignedMissionsSuccess("");
       }
 
       try {
@@ -247,6 +413,101 @@ export default function ProfilePage() {
     setNewPassword("");
     setConfirmPassword("");
     setIsEditingSecurity(false);
+  };
+
+  const openResultModal = (mission) => {
+    setAssignedMissionsSuccess("");
+    setResultError("");
+    setResultMission(mission);
+    setResultForm({
+      NombreCandidatsPotentiels: getPotentialCandidatesCount(mission)?.toString() || "",
+      Observations: normalizeText(mission?.Observations || mission?.observations),
+    });
+  };
+
+  const closeResultModal = () => {
+    setResultMission(null);
+    setResultError("");
+    setResultForm({
+      NombreCandidatsPotentiels: "",
+      Observations: "",
+    });
+  };
+
+  const handleResultFieldChange = (key, value) => {
+    setResultForm((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+
+    if (resultError) {
+      setResultError("");
+    }
+  };
+
+  const handleResultSubmit = async (event) => {
+    event.preventDefault();
+    setResultError("");
+    setAssignedMissionsSuccess("");
+
+    if (!userId) {
+      setResultError("Impossible d'identifier l'utilisateur connecte.");
+      return;
+    }
+
+    if (!resultMission?.Id) {
+      setResultError("Mission introuvable.");
+      return;
+    }
+
+    if (!canSubmitMissionResult(resultMission)) {
+      setResultError("Impossible de saisir le resultat d'une mission future.");
+      return;
+    }
+
+    const rawCount = normalizeText(resultForm.NombreCandidatsPotentiels);
+    if (!rawCount) {
+      setResultError("Le nombre de candidats potentiels est obligatoire.");
+      return;
+    }
+
+    const parsedCount = Number(rawCount);
+    if (!Number.isInteger(parsedCount) || parsedCount < 0) {
+      setResultError("Le nombre de candidats potentiels doit etre un entier positif ou nul.");
+      return;
+    }
+
+    setIsSavingResult(true);
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/missions/${resultMission.Id}/resultat`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...buildRoleHeaders(user),
+        },
+        body: JSON.stringify({
+          userId,
+          NombreCandidatsPotentiels: parsedCount,
+          Observations: normalizeText(resultForm.Observations),
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok || data?.success === false || !data?.mission) {
+        throw new Error(data?.message || "Impossible d'enregistrer le resultat de la mission.");
+      }
+
+      setAssignedMissions((prev) => prev.map((mission) => (
+        String(mission.Id) === String(data.mission.Id) ? { ...mission, ...data.mission } : mission
+      )));
+      setAssignedMissionsSuccess(data?.message || "Resultat de mission enregistre avec succes.");
+      closeResultModal();
+    } catch (error) {
+      setResultError(error?.message || "Impossible d'enregistrer le resultat de la mission.");
+    } finally {
+      setIsSavingResult(false);
+    }
   };
 
   const handlePasswordSubmit = async (event) => {
@@ -429,6 +690,9 @@ export default function ProfilePage() {
             {assignedMissionsError ? (
               <div className="profile-card__alert profile-card__alert--error">{assignedMissionsError}</div>
             ) : null}
+            {assignedMissionsSuccess ? (
+              <div className="profile-card__alert profile-card__alert--success">{assignedMissionsSuccess}</div>
+            ) : null}
 
             {isLoadingAssignedMissions ? (
               <div className="profile-missions__empty">Chargement des missions affectees...</div>
@@ -436,46 +700,71 @@ export default function ProfilePage() {
               <div className="profile-missions__empty">Aucune mission affectee pour le moment.</div>
             ) : (
               <div className="profile-missions__list">
-                {assignedMissions.map((mission) => (
-                  <article key={mission.Id || mission.CodeMission} className="profile-mission-card">
-                    <div className="profile-mission-card__head">
-                      <div>
-                        <p className="profile-mission-card__eyebrow">Mission affectee</p>
-                        <h4>{missionCodeLabel(mission)}</h4>
-                      </div>
-                      <span className={getMissionStatusClass(mission.Statut || mission.statut)}>
-                        {normalizeText(mission.Statut || mission.statut) || "Planifiee"}
-                      </span>
-                    </div>
+                {assignedMissions.map((mission) => {
+                  const displayStatus = getMissionDisplayStatus(mission);
+                  const canCaptureResult = canSubmitMissionResult(mission);
+                  const potentialCandidates = getPotentialCandidatesCount(mission);
+                  const observations = normalizeText(mission.Observations || mission.observations);
 
-                    <div className="profile-mission-card__summary">
-                      <span>{toDisplayDate(mission.DateMission || mission.date)}</span>
-                      <span>{`${normalizeText(mission.Gouvernorat) || "Non renseigne"} - ${normalizeText(mission.Delegation) || "Non renseignee"}`}</span>
-                    </div>
+                  return (
+                    <article key={mission.Id || mission.CodeMission} className="profile-mission-card">
+                      <div className="profile-mission-card__head">
+                        <div>
+                          <p className="profile-mission-card__eyebrow">Mission affectee</p>
+                          <h4>{missionCodeLabel(mission)}</h4>
+                        </div>
+                        <span className={getMissionStatusClass(displayStatus)}>{displayStatus}</span>
+                      </div>
 
-                    <div className="profile-mission-card__grid">
-                      <div className="profile-mission-card__item">
-                        <span>Transport</span>
-                        <strong>{normalizeText(mission.Transport || mission.transport) || "Non renseigne"}</strong>
+                      <div className="profile-mission-card__summary">
+                        <span>{toDisplayDate(mission.DateMission || mission.date)}</span>
+                        <span>{`${normalizeText(mission.Gouvernorat) || "Non renseigne"} - ${normalizeText(mission.Delegation) || "Non renseignee"}`}</span>
                       </div>
-                      <div className="profile-mission-card__item">
-                        <span>Objectif</span>
-                        <strong>{normalizeText(mission.Objectif || mission.objectif) || "Non renseigne"}</strong>
-                      </div>
-                      <div className="profile-mission-card__item">
-                        <span>Creee par</span>
-                        <strong>{normalizeText(mission.CreeParNom || mission.createdBy) || "Non renseigne"}</strong>
-                      </div>
-                    </div>
 
-                    {normalizeText(mission.Observations || mission.observations) ? (
-                      <div className="profile-mission-card__note">
-                        <span>Observations</span>
-                        <p>{normalizeText(mission.Observations || mission.observations)}</p>
+                      <div className="profile-mission-card__grid">
+                        <div className="profile-mission-card__item">
+                          <span>Transport</span>
+                          <strong>{normalizeText(mission.Transport || mission.transport) || "Non renseigne"}</strong>
+                        </div>
+                        <div className="profile-mission-card__item">
+                          <span>Objectif</span>
+                          <strong>{normalizeText(mission.Objectif || mission.objectif) || "Non renseigne"}</strong>
+                        </div>
+                        <div className="profile-mission-card__item">
+                          <span>Creee par</span>
+                          <strong>{normalizeText(mission.CreeParNom || mission.createdBy) || "Non renseigne"}</strong>
+                        </div>
                       </div>
-                    ) : null}
-                  </article>
-                ))}
+
+                      <div className="profile-mission-card__actions">
+                        {canCaptureResult ? (
+                          <button type="button" className="profile-card__action profile-mission-card__action" onClick={() => openResultModal(mission)}>
+                            Saisir resultat
+                          </button>
+                        ) : (
+                          <span className="profile-mission-card__helper">Resultat disponible le jour de la mission</span>
+                        )}
+                      </div>
+
+                      {potentialCandidates !== null || observations ? (
+                        <div className="profile-mission-card__note profile-mission-card__note--result">
+                          {potentialCandidates !== null ? (
+                            <div className="profile-mission-card__result-row">
+                              <span>Nombre de candidats potentiels</span>
+                              <strong>{potentialCandidates}</strong>
+                            </div>
+                          ) : null}
+                          {observations ? (
+                            <div className="profile-mission-card__result-copy">
+                              <span>Observations</span>
+                              <p>{observations}</p>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })}
               </div>
             )}
           </section>
@@ -551,6 +840,18 @@ export default function ProfilePage() {
           </section>
         </aside>
       </div>
+
+      {resultMission ? (
+        <MissionResultModal
+          mission={resultMission}
+          form={resultForm}
+          error={resultError}
+          saving={isSavingResult}
+          onChange={handleResultFieldChange}
+          onClose={closeResultModal}
+          onSubmit={handleResultSubmit}
+        />
+      ) : null}
     </div>
   );
 }

@@ -22,6 +22,22 @@ function isDuplicateCinError(err) {
     return errorNumber === 2601 || errorNumber === 2627;
 }
 
+function readActionUser(body, requestUser) {
+    return {
+        utilisateur_id: body?.utilisateur_id ?? requestUser?.id ?? null,
+        utilisateur_nom:
+            body?.utilisateur_nom ??
+            requestUser?.nom ??
+            requestUser?.name ??
+            requestUser?.fullName ??
+            requestUser?.username ??
+            requestUser?.nomComplet ??
+            requestUser?.email ??
+            "",
+        utilisateur_role: body?.utilisateur_role ?? requestUser?.role ?? "",
+    };
+}
+
 exports.listerCandidats = async (_req, res) => {
     try {
         const pool = await sql.connect(config);
@@ -39,7 +55,9 @@ exports.listerCandidats = async (_req, res) => {
                 CASE WHEN COL_LENGTH('dbo.candidats', 'dossier_valide') IS NULL THEN 0 ELSE 1 END AS has_dossier_valide,
                 CASE WHEN COL_LENGTH('dbo.candidats', 'date_signature') IS NULL THEN 0 ELSE 1 END AS has_date_signature,
                 CASE WHEN COL_LENGTH('dbo.candidats', 'type_contrat') IS NULL THEN 0 ELSE 1 END AS has_type_contrat,
-                CASE WHEN COL_LENGTH('dbo.candidats', 'statut_contrat') IS NULL THEN 0 ELSE 1 END AS has_statut_contrat;
+                CASE WHEN COL_LENGTH('dbo.candidats', 'statut_contrat') IS NULL THEN 0 ELSE 1 END AS has_statut_contrat,
+                CASE WHEN COL_LENGTH('dbo.candidats', 'statut_dossier') IS NULL THEN 0 ELSE 1 END AS has_statut_dossier,
+                CASE WHEN COL_LENGTH('dbo.candidats', 'situation_familiale') IS NULL THEN 0 ELSE 1 END AS has_situation_familiale;
         `);
 
         const metadata = meta.recordset?.[0] || {};
@@ -68,6 +86,8 @@ exports.listerCandidats = async (_req, res) => {
                 ${metadata.has_date_signature ? "date_signature" : "CAST(NULL AS DATETIME) AS date_signature"},
                 ${metadata.has_type_contrat ? "type_contrat" : "CAST(NULL AS VARCHAR(30)) AS type_contrat"},
                 ${metadata.has_statut_contrat ? "statut_contrat" : "CAST(NULL AS VARCHAR(30)) AS statut_contrat"},
+                ${metadata.has_statut_dossier ? "statut_dossier" : "CAST(NULL AS VARCHAR(30)) AS statut_dossier"},
+                ${metadata.has_situation_familiale ? "situation_familiale" : "CAST(NULL AS VARCHAR(50)) AS situation_familiale"},
                 genre
             FROM dbo.candidats
             ORDER BY id DESC;
@@ -78,6 +98,46 @@ exports.listerCandidats = async (_req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: "Impossible de charger les candidats." });
+    }
+};
+
+exports.listerMouvements = async (req, res) => {
+    try {
+        const nouvelleEtape = readTrimmed(req.query, "nouvelle_etape");
+        const dateFilter = readTrimmed(req.query, "date");
+        const pool = await sql.connect(config);
+        const request = pool.request()
+            .input("nouvelle_etape", sql.VarChar(50), nouvelleEtape || null)
+            .input("date_filter", sql.Date, dateFilter || null);
+
+        const result = await request.query(`
+            SELECT TOP 50
+                cm.id,
+                cm.candidat_id,
+                c.nom,
+                c.cin,
+                cm.ancienne_etape,
+                cm.nouvelle_etape,
+                cm.action,
+                cm.commentaire,
+                cm.utilisateur_id,
+                cm.utilisateur_nom,
+                cm.utilisateur_role,
+                cm.created_at
+            FROM dbo.candidat_mouvements cm
+            INNER JOIN dbo.candidats c ON cm.candidat_id = c.id
+            WHERE (@nouvelle_etape IS NULL OR cm.nouvelle_etape = @nouvelle_etape)
+              AND (@date_filter IS NULL OR CAST(cm.created_at AS DATE) = @date_filter)
+            ORDER BY cm.created_at DESC, cm.id DESC;
+        `);
+
+        return res.json({
+            success: true,
+            mouvements: result.recordset || [],
+        });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ message: "Impossible de charger les mouvements candidats." });
     }
 };
 
@@ -132,7 +192,7 @@ exports.createCandidat = async (req, res) => {
             poste,
             adresse,
             genre,
-        });
+        }, req.user);
 
         return res.status(201).json({
             message: "Candidat ajoute avec succes.",
@@ -239,26 +299,43 @@ exports.deleteCandidat = async (req, res) => {
 
 exports.updateEtape = async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = Number(req.params?.id);
         const { etape, statut } = req.body;
 
-        const pool = await sql.connect(config);
+        if (!Number.isInteger(id) || id <= 0) {
+            return res.status(400).json({ message: "Identifiant candidat invalide." });
+        }
 
-        await pool.request()
-            .input("id", sql.Int, id)
-            .input("etape", sql.VarChar, etape)
-            .input("statut", sql.VarChar, statut)
-            .query(`
-                UPDATE dbo.candidats
-                SET etape = @etape,
-                   statut = @statut
-                WHERE id = @id
-            `);
+        const trimmedEtape = String(etape ?? "").trim();
+        const trimmedStatut = typeof statut === "string" ? statut.trim() : "";
+        if (!trimmedEtape) {
+            return res.status(400).json({ message: "Etape cible invalide." });
+        }
 
-        res.json({ message: "Etape mise a jour" });
+        const normalizedEtape = trimmedEtape.toUpperCase();
+        const action =
+            normalizedEtape === "TEST_ENTRETIEN"
+                ? "Envoyer vers Test / Entretien"
+                : "Changement d'etape candidat";
+
+        const result = await candidatModel.updateWorkflowStepWithMovement(
+            id,
+            trimmedEtape,
+            trimmedStatut,
+            action,
+            null,
+            req.user
+        );
+
+        res.json({
+            message: "Etape mise a jour",
+            candidat: result.candidate,
+            mouvement_enregistre: result.movementInserted,
+        });
     } catch (err) {
         console.error(err);
-        res.status(500).send(err.message);
+        const status = Number.isInteger(err?.status) ? err.status : 500;
+        res.status(status).json({ message: err.message || "Mise a jour etape impossible." });
     }
 };
 
@@ -266,8 +343,9 @@ exports.signerContratCandidat = async (req, res) => {
     try {
         const candidatId = Number.parseInt(req.params.id, 10);
         const typeContrat = readTrimmed(req.body, "typeContrat", "type_contrat");
+        const actionUser = readActionUser(req.body, req.user);
 
-        const result = await candidatModel.signerContratCandidat(candidatId, typeContrat);
+        const result = await candidatModel.signerContratCandidat(candidatId, typeContrat, actionUser);
 
         return res.json({
             ok: true,
@@ -280,6 +358,27 @@ exports.signerContratCandidat = async (req, res) => {
         return res.status(status).json({
             ok: false,
             message: err?.message || "Signature contrat impossible.",
+        });
+    }
+};
+
+exports.validerDossierContrat = async (req, res) => {
+    try {
+        const candidatId = Number.parseInt(req.params.id, 10);
+        const actionUser = readActionUser(req.body, req.user);
+        const result = await candidatModel.validerDossierContrat(candidatId, actionUser);
+
+        return res.json({
+            ok: true,
+            message: "Dossier valide avec succes.",
+            ...result,
+        });
+    } catch (err) {
+        console.error("Erreur validerDossierContrat:", err);
+        const status = Number.isInteger(err?.status) ? err.status : 500;
+        return res.status(status).json({
+            ok: false,
+            message: err?.message || "Validation dossier impossible.",
         });
     }
 };

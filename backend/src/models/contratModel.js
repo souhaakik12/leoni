@@ -1,5 +1,6 @@
 const sql = require("mssql");
 const config = require("../../config");
+const { enregistrerActionContrat, resolveActionActor } = require("./contratActionModel");
 
 class ContratError extends Error {
     constructor(message, status = 500) {
@@ -104,6 +105,7 @@ function buildListeContratsQuery(request, search) {
             jours_restants,
             jours_restants_affichage,
             alerte,
+            traite_par,
             source_donnee
         FROM dbo.vw_contrats_interface v
         ${whereClause}
@@ -137,7 +139,7 @@ async function getContratsFront({ search }) {
     };
 }
 
-async function renouvelerContrat(idContrat, sourceDonnee) {
+async function renouvelerContrat(idContrat, sourceDonnee, actionUser = null) {
     const normalizedId = Number(idContrat);
     const normalizedSource = normalizeSourceDonnee(sourceDonnee);
 
@@ -156,7 +158,10 @@ async function renouvelerContrat(idContrat, sourceDonnee) {
         .query(`
             SELECT TOP 1
                 id_contrat,
+                cin,
+                nom_prenom,
                 type_contrat,
+                date_debut_contrat,
                 date_fin_contrat,
                 alerte,
                 source_donnee
@@ -178,20 +183,63 @@ async function renouvelerContrat(idContrat, sourceDonnee) {
         throw new ContratError("Impossible de renouveler : date fin contrat manquante.", 400);
     }
 
-    const newDateDebut = new Date(contrat.date_fin_contrat);
-    if (Number.isNaN(newDateDebut.getTime())) {
+    const oldDateDebut = contrat.date_debut_contrat ? new Date(contrat.date_debut_contrat) : null;
+    const oldDateFin = new Date(contrat.date_fin_contrat);
+    if (Number.isNaN(oldDateFin.getTime())) {
         throw new ContratError("Impossible de renouveler : date fin contrat invalide.", 400);
     }
 
+    const newDateDebut = new Date(oldDateFin);
     const newDateFin = computeRenewedEndDate(newDateDebut, contrat.type_contrat);
     if (!newDateFin) {
         throw new ContratError("Impossible de calculer la nouvelle date de fin.", 500);
     }
 
     const transaction = new sql.Transaction(pool);
+    const actor = resolveActionActor(actionUser);
 
     try {
         await transaction.begin();
+        const dateRenouvellement = new Date();
+        let candidatId = null;
+
+        await transaction.request()
+            .input("id_contrat", sql.Int, normalizedId)
+            .input("source_donnee", sql.VarChar(20), normalizedSource)
+            .input("cin", sql.VarChar(50), contrat.cin || null)
+            .input("nom_prenom", sql.NVarChar(255), contrat.nom_prenom || null)
+            .input("type_contrat", sql.VarChar(50), contrat.type_contrat || null)
+            .input("ancienne_date_debut", sql.DateTime, oldDateDebut)
+            .input("ancienne_date_fin", sql.DateTime, oldDateFin)
+            .input("nouvelle_date_debut", sql.DateTime, newDateDebut)
+            .input("nouvelle_date_fin", sql.DateTime, newDateFin)
+            .input("date_renouvellement", sql.DateTime, dateRenouvellement)
+            .query(`
+                INSERT INTO dbo.contrats_renouvellements (
+                    id_contrat,
+                    source_donnee,
+                    cin,
+                    nom_prenom,
+                    type_contrat,
+                    ancienne_date_debut,
+                    ancienne_date_fin,
+                    nouvelle_date_debut,
+                    nouvelle_date_fin,
+                    date_renouvellement
+                )
+                VALUES (
+                    @id_contrat,
+                    @source_donnee,
+                    @cin,
+                    @nom_prenom,
+                    @type_contrat,
+                    @ancienne_date_debut,
+                    @ancienne_date_fin,
+                    @nouvelle_date_debut,
+                    @nouvelle_date_fin,
+                    @date_renouvellement
+                );
+            `);
 
         let updateResult;
         if (normalizedSource === "IMPORT") {
@@ -206,6 +254,15 @@ async function renouvelerContrat(idContrat, sourceDonnee) {
                     WHERE id_contrat_import = @id_contrat_import;
                 `);
         } else {
+            const contractOwnerResult = await transaction.request()
+                .input("id", sql.Int, normalizedId)
+                .query(`
+                    SELECT TOP 1 candidat_id
+                    FROM dbo.contrats
+                    WHERE id = @id;
+                `);
+            candidatId = Number(contractOwnerResult.recordset?.[0]?.candidat_id || 0) || null;
+
             updateResult = await transaction.request()
                 .input("id", sql.Int, normalizedId)
                 .input("date_debut", sql.DateTime, newDateDebut)
@@ -223,6 +280,17 @@ async function renouvelerContrat(idContrat, sourceDonnee) {
         if (!Number(updateResult?.rowsAffected?.[0] || 0)) {
             throw new ContratError("Aucun contrat n’a pu être renouvelé.", 404);
         }
+
+        await enregistrerActionContrat(transaction, {
+            id_contrat: normalizedId,
+            source_donnee: normalizedSource,
+            candidat_id: candidatId,
+            cin: contrat.cin || null,
+            nom_prenom: contrat.nom_prenom || null,
+            action_type: "RENOUVELLEMENT_CONTRAT",
+            action_description: `Contrat renouvele par ${actor.utilisateur_nom}`,
+            ...actor,
+        });
 
         await transaction.commit();
 

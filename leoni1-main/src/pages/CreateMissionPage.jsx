@@ -1,10 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useMissions } from "../context/MissionsContext.jsx";
 import { gouvernorats, delegationsParGouvernorat } from "../data/gouvernoratsDelegations";
-
-const PLANIFIED_STATUS = "Planifi\u00e9e";
+import { buildRoleHeaders } from "../utils/roles.js";
 const transportOptions = ["Bus", "Minibus", "Van", "Voiture de service"];
 const monthLabels = ["Janvier", "Fevrier", "Mars", "Avril", "Mai", "Juin", "Juillet", "Aout", "Septembre", "Octobre", "Novembre", "Decembre"];
 const dayLabels = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
@@ -20,6 +19,10 @@ function toKey(year, month, day) {
 function toLabel(key) {
   const [year, month, day] = key.split("-");
   return `${day}/${month}/${year}`;
+}
+
+function isPastDateKey(dateKey, todayKey) {
+  return Boolean(dateKey) && dateKey < todayKey;
 }
 
 function monthCells(year, month) {
@@ -92,7 +95,7 @@ function StepBullet({ active, done, n, text }) {
   );
 }
 
-function ResponsablesPicker({ responsables, value, onToggle, error, loading, requestError }) {
+function ResponsablesPicker({ responsables, value, onToggle, error, loading, requestError, availabilityLoading, busyMap = {} }) {
   return (
     <div>
       <label style={label}>Responsables * (selection multiple)</label>
@@ -103,17 +106,29 @@ function ResponsablesPicker({ responsables, value, onToggle, error, loading, req
           <div style={{ fontSize: 12, color: requestError ? "#dc2626" : "#6b7280", gridColumn: "1 / -1" }}>
             {requestError || "Aucun responsable actif disponible."}
           </div>
-        ) : responsables.map((item) => (
-          <label key={item.Id} style={{ fontSize: 12, color: "#374151", display: "flex", gap: 8, alignItems: "flex-start" }}>
-            <input type="checkbox" checked={value.some((id) => String(id) === String(item.Id))} onChange={() => onToggle(item.Id)} />
-            <span>
-              <strong style={{ display: "block", color: "#111827" }}>{responsableName(item)}</strong>
-              <span style={{ color: "#6b7280" }}>{item.Email} - {item.Role}</span>
-            </span>
-          </label>
-        ))}
+        ) : responsables.map((item) => {
+          const isSelected = value.some((id) => String(id) === String(item.Id));
+          const busyInfo = busyMap[String(item.Id)];
+          const isBusy = Boolean(busyInfo);
+
+          return (
+            <label key={item.Id} style={{ fontSize: 12, color: isBusy ? "#9ca3af" : "#374151", display: "flex", gap: 8, alignItems: "flex-start", opacity: isBusy && !isSelected ? 0.68 : 1 }}>
+              <input type="checkbox" checked={isSelected} disabled={isBusy && !isSelected} onChange={() => onToggle(item.Id)} />
+              <span>
+                <strong style={{ display: "block", color: "#111827" }}>{responsableName(item)}</strong>
+                <span style={{ color: "#6b7280" }}>{item.Email} - {item.Role}</span>
+                {isBusy ? (
+                  <span style={{ display: "block", marginTop: 3, color: "#dc2626", fontSize: 10, fontWeight: 700 }}>
+                    Deja en mission ce jour{busyInfo?.busyMission ? ` (${busyInfo.busyMission})` : ""}
+                  </span>
+                ) : null}
+              </span>
+            </label>
+          );
+        })}
       </div>
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4 }}>{value.length} responsable(s) selectionne(s)</div>
+      {availabilityLoading ? <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>Verification de disponibilite...</div> : null}
       {error && <div style={{ fontSize: 10, color: "#dc2626", marginTop: 2 }}>{error}</div>}
     </div>
   );
@@ -136,9 +151,62 @@ export default function CreateMissionPage() {
   const [activeDate, setActiveDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [busyResponsablesByDate, setBusyResponsablesByDate] = useState({});
+  const [loadingBusyByDate, setLoadingBusyByDate] = useState({});
 
   const cells = useMemo(() => monthCells(year, month), [year, month]);
   const sortedDates = useMemo(() => [...selectedDates].sort(), [selectedDates]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (!sortedDates.length) {
+      setBusyResponsablesByDate({});
+      setLoadingBusyByDate({});
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    sortedDates.forEach((dateKey) => {
+      setLoadingBusyByDate((prev) => ({ ...prev, [dateKey]: true }));
+
+      fetch(`http://localhost:3000/api/missions/responsables?date=${encodeURIComponent(dateKey)}`, {
+        headers: buildRoleHeaders(user),
+      })
+        .then(async (response) => {
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || data?.success === false) {
+            throw new Error(data?.message || "Impossible de verifier la disponibilite des responsables.");
+          }
+
+          const nextBusyMap = {};
+          (Array.isArray(data?.responsables) ? data.responsables : []).forEach((item) => {
+            if (item?.busy) {
+              nextBusyMap[String(item.Id)] = item;
+            }
+          });
+
+          if (!isCancelled) {
+            setBusyResponsablesByDate((prev) => ({ ...prev, [dateKey]: nextBusyMap }));
+          }
+        })
+        .catch(() => {
+          if (!isCancelled) {
+            setBusyResponsablesByDate((prev) => ({ ...prev, [dateKey]: {} }));
+          }
+        })
+        .finally(() => {
+          if (!isCancelled) {
+            setLoadingBusyByDate((prev) => ({ ...prev, [dateKey]: false }));
+          }
+        });
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [sortedDates, user]);
 
   const setPlan = (dateKey, patch) => {
     setPlans((prev) => ({ ...prev, [dateKey]: { ...(prev[dateKey] || defaultPlan(dateKey)), ...patch } }));
@@ -186,6 +254,10 @@ export default function CreateMissionPage() {
 
   const goToDetails = () => {
     if (!sortedDates.length) return;
+    if (sortedDates.some((dateKey) => isPastDateKey(dateKey, todayKey))) {
+      setSubmitError("Impossible de creer une mission avec une date passee.");
+      return;
+    }
 
     setPlans((prev) => {
       const next = { ...prev };
@@ -212,6 +284,11 @@ export default function CreateMissionPage() {
       setStep("details");
       return;
     }
+    if (sortedDates.some((dateKey) => isPastDateKey(dateKey, todayKey))) {
+      setSubmitError("Impossible de creer une mission avec une date passee.");
+      setStep("dates");
+      return;
+    }
 
     setSaving(true);
     setSubmitError("");
@@ -227,7 +304,6 @@ export default function CreateMissionPage() {
           Transport: plan.transport,
           Objectif: plan.objectif,
           Observations: plan.observations,
-          Statut: PLANIFIED_STATUS,
           CreePar: user?.Id ?? user?.id ?? null,
           responsablesIds: plan.responsableIds,
         });
@@ -290,8 +366,12 @@ export default function CreateMissionPage() {
                 <button
                   key={key}
                   onClick={() => {
-                    if (isPast) return;
+                    if (isPast) {
+                      setSubmitError("Impossible de creer une mission avec une date passee.");
+                      return;
+                    }
                     if (step === "dates") {
+                      setSubmitError("");
                       setSelectedDates((prev) => {
                         const next = new Set(prev);
                         if (next.has(key)) next.delete(key);
@@ -393,6 +473,8 @@ export default function CreateMissionPage() {
                       error={errors[`${dateKey}:responsableIds`]}
                       loading={loadingResponsables}
                       requestError={responsablesError}
+                      availabilityLoading={Boolean(loadingBusyByDate[dateKey])}
+                      busyMap={busyResponsablesByDate[dateKey] || {}}
                     />
                   </div>
 
@@ -464,6 +546,8 @@ export default function CreateMissionPage() {
                     error=""
                     loading={loadingResponsables}
                     requestError={responsablesError}
+                    availabilityLoading={Boolean(loadingBusyByDate[activeDate])}
+                    busyMap={busyResponsablesByDate[activeDate] || {}}
                   />
 
                   <div>

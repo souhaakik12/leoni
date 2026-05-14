@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, useNavigate, useParams } from "react-router-dom";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useRecrutements } from "../context/RecrutementsContext.jsx";
+import { buildRoleHeaders, normalizeRole } from "../utils/roles.js";
 import "./CandidatsPage.css";
 
 const STATUS_NOUVEAU = "Nouveau";
@@ -110,6 +112,12 @@ const postes = [
 const MAX_CIN_LENGTH = 8;
 const MAX_PHONE_LENGTH = 8;
 const MAX_AGE_LENGTH = 2;
+const DEFAULT_VISIBLE_MOVEMENTS = 10;
+const MOVEMENT_FILTERS = [
+  { id: "all", label: "Tous", step: "" },
+  { id: "test", label: "Vers Test / Entretien", step: "TEST_ENTRETIEN" },
+  { id: "seance", label: "Vers Séance Contrat", step: "SEANCE_INFO" },
+];
 
 function inferCandidateType(candidat) {
   if (candidat.typeCandidat === TYPE_CANDIDAT_CONTRACT_SESSION) return TYPE_CANDIDAT_CONTRACT_SESSION;
@@ -153,6 +161,30 @@ function norm(value) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+}
+
+function toBooleanFlag(value) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["1", "true", "oui", "yes"].includes(normalized)) return true;
+    if (["0", "false", "non", "no", ""].includes(normalized)) return false;
+  }
+  return false;
+}
+
+function isFinalizedCandidate(candidate) {
+  const statut = String(candidate?.statut || "").trim().toUpperCase();
+  const etape = String(candidate?.etape || "").trim().toUpperCase();
+  const contratSigne = toBooleanFlag(candidate?.contratSigne ?? candidate?.contrat_signe);
+  const dossierValide = toBooleanFlag(candidate?.dossierValide ?? candidate?.dossier_valide);
+
+  return (
+    statut === "CONTRAT_FINALISE" ||
+    etape === "NOUVEAU_RECRUTE" ||
+    (contratSigne && dossierValide)
+  );
 }
 
 function normalizeCanalEntree(value) {
@@ -278,8 +310,59 @@ function getEntretienMeta(value) {
   if (value === ENTRETIEN_NOK) return { label: "Entretien NOK", className: "nok" };
   return { label: "Entretien en attente", className: "wait" };
 }
+
+function formatMovementStep(step) {
+  const normalized = String(step || "").trim().toUpperCase();
+  if (normalized === "TEST_ENTRETIEN") return "Test / Entretien";
+  if (normalized === "SEANCE_INFO") return "Séance Contrat";
+  if (normalized === "CANDIDAT" || normalized === "CANDIDATURE") return "Candidat";
+  return String(step || "-");
+}
+
+function formatMovementRole(role) {
+  const normalized = normalizeRole(role);
+  if (normalized === "admin") return "Admin";
+  if (normalized === "recruteur") return "Recruteur";
+  if (normalized === "contrats") return "Contrats";
+  return String(role || "").trim();
+}
+
+function formatMovementUser(mouvement) {
+  const userName = String(mouvement?.utilisateur_nom || "").trim() || "Utilisateur inconnu";
+  const userRole = formatMovementRole(mouvement?.utilisateur_role);
+  return userRole ? `Par : ${userName} — ${userRole}` : `Par : ${userName}`;
+}
+
+function getMovementBadgeClass(step) {
+  const normalized = String(step || "").trim().toUpperCase();
+  if (normalized === "TEST_ENTRETIEN") return "test";
+  if (normalized === "SEANCE_INFO") return "seance";
+  return "neutral";
+}
+
+function formatSqlDateTime(value) {
+  if (!value) return "-";
+
+  const cleanValue = String(value)
+    .replace("T", " ")
+    .replace("Z", "")
+    .split(".")[0];
+
+  const [datePart, timePart] = cleanValue.split(" ");
+
+  if (!datePart || !timePart) return cleanValue;
+
+  const [year, month, day] = datePart.split("-");
+  const [hour, minute] = timePart.split(":");
+
+  return `${day}/${month}/${year} ${hour}:${minute}`;
+}
+
 function mapApiCandidate(candidate) {
   const etape = String(candidate?.etape || "CANDIDATURE").trim().toUpperCase();
+  const contratSigne = toBooleanFlag(candidate?.contrat_signe ?? candidate?.contratSigne);
+  const dossierValide = toBooleanFlag(candidate?.dossier_valide ?? candidate?.dossierValide);
+  const rawStatut = String(candidate?.statut || "").trim();
 
   let typeCandidat = "candidat";
 
@@ -292,7 +375,7 @@ function mapApiCandidate(candidate) {
   }
 
   const statut =
-    (candidate?.statut || "").trim() ||
+    rawStatut ||
     (etape === "SEANCE_INFO"
       ? "En attente seance contrat"
       : etape === "DOSSIER_CONTRAT"
@@ -323,13 +406,26 @@ function mapApiCandidate(candidate) {
     notes: "",
     entretienResult,
     documentsContrat: {},
-    contratSigne: false,
-    contratValide: false,
+    contratSigne,
+    contrat_signe: contratSigne,
+    dossierValide,
+    dossier_valide: dossierValide,
+    contratValide: dossierValide,
+    typeContrat: candidate?.type_contrat || "",
+    type_contrat: candidate?.type_contrat || "",
+    statutContrat: candidate?.statut_contrat || "",
+    statut_contrat: candidate?.statut_contrat || "",
+    statutDossier: candidate?.statut_dossier || "",
+    statut_dossier: candidate?.statut_dossier || "",
+    dateSignature: candidate?.date_signature || null,
+    date_signature: candidate?.date_signature || null,
+    situation_familiale: candidate?.situation_familiale || "",
   });
 }
 export default function CandidatsPage() {
   const { typePage = "candidat" } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { refreshCandidatsFromApi } = useRecrutements();
   const currentTypeId = routeToType[typePage] || "candidat";
   const currentType = typeMap[currentTypeId];
@@ -358,6 +454,11 @@ export default function CandidatsPage() {
   const [editMessage, setEditMessage] = useState("");
   const [candidateToDelete, setCandidateToDelete] = useState(null);
   const [isDeletingCandidate, setIsDeletingCandidate] = useState(false);
+  const [mouvements, setMouvements] = useState([]);
+  const [movementFilter, setMovementFilter] = useState("all");
+  const [mouvementsError, setMouvementsError] = useState("");
+  const [visibleMovementCount, setVisibleMovementCount] = useState(DEFAULT_VISIBLE_MOVEMENTS);
+  const [isTraceOpen, setIsTraceOpen] = useState(false);
 
   const fetchCandidats = async () => {
     try {
@@ -374,12 +475,45 @@ export default function CandidatsPage() {
     }
   };
 
+  const fetchMouvements = async (filterId = movementFilter) => {
+    try {
+      const selectedFilter = MOVEMENT_FILTERS.find((item) => item.id === filterId) || MOVEMENT_FILTERS[0];
+      const url = new URL("http://localhost:3000/api/candidats/mouvements");
+      if (selectedFilter.step) {
+        url.searchParams.set("nouvelle_etape", selectedFilter.step);
+      }
+
+      const res = await fetch(url.toString());
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.message || "Impossible de charger la traçabilité.");
+      }
+
+      setMouvements(Array.isArray(data?.mouvements) ? data.mouvements : []);
+      setMouvementsError("");
+    } catch (error) {
+      setMouvements([]);
+      setMouvementsError(error?.message || "Erreur reseau pendant le chargement de la traçabilité.");
+    }
+  };
+
   useEffect(() => {
     fetchCandidats();
   }, []);
 
+  useEffect(() => {
+    fetchMouvements(movementFilter);
+  }, [movementFilter]);
+
+  useEffect(() => {
+    setVisibleMovementCount(DEFAULT_VISIBLE_MOVEMENTS);
+  }, [movementFilter, mouvements.length]);
+
   const candidatsNormalized = useMemo(
-    () => candidats.map((c) => ({ ...c, typeCandidat: inferCandidateType(c) })),
+    () =>
+      candidats
+        .map((c) => ({ ...c, typeCandidat: inferCandidateType(c) }))
+        .filter((candidate) => !isFinalizedCandidate(candidate)),
     [candidats]
   );
 
@@ -423,6 +557,11 @@ export default function CandidatsPage() {
   );
 
   const lane = { ...currentType, items: filtered };
+  const displayedMouvements = useMemo(
+    () => mouvements.slice(0, visibleMovementCount),
+    [mouvements, visibleMovementCount]
+  );
+  const hasMoreMouvements = mouvements.length > visibleMovementCount;
 
   const pushToast = (message, type = "success", timeout = 2200) => {
     setToast({ message, type });
@@ -449,9 +588,9 @@ export default function CandidatsPage() {
     try {
       const response = await fetch(`http://localhost:3000/api/candidats/${candidate.id}/etape`, {
         method: "PUT",
-        headers: {
+        headers: buildRoleHeaders(user, {
           "Content-Type": "application/json",
-        },
+        }),
         body: JSON.stringify({ etape: "TEST_ENTRETIEN" }),
       });
 
@@ -461,6 +600,7 @@ export default function CandidatsPage() {
       }
 
       await fetchCandidats();
+      await fetchMouvements();
       if (typeof refreshCandidatsFromApi === "function") {
         await refreshCandidatsFromApi();
       }
@@ -474,9 +614,9 @@ export default function CandidatsPage() {
   const handleEntretienOK = async (candidate) => {
     const response = await fetch(`http://localhost:3000/api/candidats/${candidate.id}/etape`, {
       method: "PUT",
-      headers: {
+      headers: buildRoleHeaders(user, {
         "Content-Type": "application/json",
-      },
+      }),
       body: JSON.stringify({
         etape: "SEANCE_INFO",
         statut: "En attente seance contrat",
@@ -489,6 +629,7 @@ export default function CandidatsPage() {
     }
 
     await fetchCandidats();
+    await fetchMouvements();
     if (typeof refreshCandidatsFromApi === "function") {
       await refreshCandidatsFromApi();
     }
@@ -627,9 +768,9 @@ export default function CandidatsPage() {
     try {
       const response = await fetch("http://localhost:3000/api/candidats", {
         method: "POST",
-        headers: {
+        headers: buildRoleHeaders(user, {
           "Content-Type": "application/json",
-        },
+        }),
         body: JSON.stringify(data),
       });
 
@@ -651,6 +792,7 @@ if (!response.ok) {
       if (typeof refreshCandidatsFromApi === "function") {
         await refreshCandidatsFromApi();
       }
+      await fetchMouvements();
       createCandidate();
     } catch (error) {
       const message = error?.message || "Erreur reseau.";
@@ -685,6 +827,7 @@ if (!response.ok) {
       if (typeof refreshCandidatsFromApi === "function") {
         await refreshCandidatsFromApi();
       }
+      await fetchMouvements();
       cancelEditCandidate();
       pushToast("Candidat modifie avec succes.");
     } catch (error) {
@@ -714,6 +857,7 @@ if (!response.ok) {
       setIsDeletingCandidate(true);
       const response = await fetch(`http://localhost:3000/api/candidats/${candidateToDelete.id}`, {
         method: "DELETE",
+        headers: buildRoleHeaders(user),
       });
 
       const result = await response.json().catch(() => ({}));
@@ -722,6 +866,7 @@ if (!response.ok) {
       }
 
       await fetchCandidats();
+      await fetchMouvements();
       if (typeof refreshCandidatsFromApi === "function") {
         await refreshCandidatsFromApi();
       }
@@ -1019,6 +1164,90 @@ if (!response.ok) {
           Réinitialiser
         </button>
       </div>
+
+      <section className="cand-trace-card">
+        <button
+          type="button"
+          className="cand-trace-head"
+          onClick={() => setIsTraceOpen((prev) => !prev)}
+          aria-expanded={isTraceOpen}
+        >
+          <div className="cand-trace-head-copy">
+            <h3>Traçabilité du processus</h3>
+            <p>Derniers mouvements des candidats dans le workflow.</p>
+          </div>
+          <div className="cand-trace-head-side">
+            <span className="cand-trace-count">{mouvements.length}</span>
+            <span className={`cand-trace-chevron ${isTraceOpen ? "open" : ""}`} aria-hidden="true">
+              {isTraceOpen ? "▲" : "▼"}
+            </span>
+          </div>
+        </button>
+
+        {isTraceOpen && (
+          <>
+          <div className="cand-trace-filters">
+            {MOVEMENT_FILTERS.map((filter) => (
+              <button
+                key={filter.id}
+                type="button"
+                className={`cand-trace-filter ${movementFilter === filter.id ? "active" : ""}`}
+                onClick={() => setMovementFilter(filter.id)}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+
+        {mouvementsError ? (
+          <div className="cand-trace-empty error">{mouvementsError}</div>
+        ) : mouvements.length === 0 ? (
+          <div className="cand-trace-empty">Aucun mouvement enregistré pour ce filtre.</div>
+        ) : (
+          <>
+          <div className="cand-trace-list">
+            {displayedMouvements.map((mouvement) => (
+              <article key={mouvement.id} className="cand-trace-item">
+                <div className="cand-trace-main">
+                  <div className="cand-trace-topline">
+                    <strong>{mouvement.nom || "Candidat"}</strong>
+                    <span>CIN: {mouvement.cin || "-"}</span>
+                  </div>
+                  <div className="cand-trace-action">{mouvement.action || "-"}</div>
+                  <div className="cand-trace-user">{formatMovementUser(mouvement)}</div>
+                  <div className="cand-trace-route">
+                    <span>{formatMovementStep(mouvement.ancienne_etape)}</span>
+                    <span className="cand-trace-arrow" aria-hidden="true">→</span>
+                    <span className={`cand-trace-badge ${getMovementBadgeClass(mouvement.nouvelle_etape)}`}>
+                      {formatMovementStep(mouvement.nouvelle_etape)}
+                    </span>
+                  </div>
+                  {mouvement.commentaire && (
+                    <div className="cand-trace-comment">{mouvement.commentaire}</div>
+                  )}
+                </div>
+                <time className="cand-trace-date" dateTime={mouvement.created_at || ""}>
+                  {formatSqlDateTime(mouvement.created_at)}
+                </time>
+              </article>
+            ))}
+          </div>
+          {hasMoreMouvements && (
+            <div className="cand-trace-more-wrap">
+              <button
+                type="button"
+                className="cand-trace-more"
+                onClick={() => setVisibleMovementCount((prev) => prev + DEFAULT_VISIBLE_MOVEMENTS)}
+              >
+                Voir plus
+              </button>
+            </div>
+          )}
+          </>
+        )}
+          </>
+        )}
+      </section>
 
       <div className="cand-board single">
         <section className="cand-lane">

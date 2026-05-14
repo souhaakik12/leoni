@@ -43,10 +43,21 @@ export function getHomeRouteForRole(role) {
 
 export function buildRoleHeaders(user, headers = {}) {
   const normalizedRole = normalizeRole(user?.role);
-  if (!normalizedRole) return { ...headers };
+  const rawUserId = user?.id ?? user?.Id ?? null;
+  const normalizedUserId =
+    rawUserId !== null && rawUserId !== undefined && String(rawUserId).trim() !== ""
+      ? String(rawUserId).trim()
+      : null;
+  const userName = String(
+    user?.nom || user?.name || user?.NomComplet || user?.nomComplet || ""
+  ).trim();
+
+  if (!normalizedRole && !normalizedUserId && !userName) return { ...headers };
 
   return {
     ...headers,
-    "x-user-role": normalizedRole,
+    ...(normalizedRole ? { "x-user-role": normalizedRole } : {}),
+    ...(normalizedUserId ? { "x-user-id": normalizedUserId } : {}),
+    ...(userName ? { "x-user-name": userName } : {}),
   };
 }

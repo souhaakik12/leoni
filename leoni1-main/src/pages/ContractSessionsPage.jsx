@@ -62,6 +62,23 @@ function formatHeureSeance(heureValue) {
   return raw;
 }
 
+function formatDateClotureSeance(dateClotureValue) {
+  if (!dateClotureValue) return "-";
+
+  const parsedDate = new Date(dateClotureValue);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return String(dateClotureValue);
+  }
+
+  return parsedDate.toLocaleString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function ContractSessionsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -273,8 +290,15 @@ export default function ContractSessionsPage() {
     const isExpanded = expandedSeanceId === seance.id;
     const sentCount = seance.candidats.filter((candidate) => candidate.statut === STATUS_EN_ATTENTE_DOSSIER).length;
     const isTerminee = seance.statutSeance === STATUS_SEANCE_TERMINEE;
-    const totalForProgress = Math.max(seance.candidats.length, 1);
-    const visualProgress = Math.min(100, Math.round((sentCount / totalForProgress) * 100));
+    const nbPresentsRaw = Number(seance.nbPresents ?? seance.nb_presents ?? 0);
+    const nbAbsentsRaw = Number(seance.nbAbsents ?? seance.nb_absents ?? 0);
+    const nbPresents = Number.isFinite(nbPresentsRaw) ? Math.max(0, nbPresentsRaw) : 0;
+    const nbAbsents = Number.isFinite(nbAbsentsRaw) ? Math.max(0, nbAbsentsRaw) : 0;
+    const dateCloture = seance.dateCloture ?? seance.date_cloture ?? null;
+    const displayedCandidatesCount = isTerminee ? nbPresents : seance.candidats.length;
+    const displayedDossierCount = isTerminee ? nbPresents : sentCount;
+    const totalForProgress = Math.max(displayedCandidatesCount, 1);
+    const visualProgress = Math.min(100, Math.round((displayedDossierCount / totalForProgress) * 100));
 
     return (
       <article key={seance.id} className={`session-card seance-card ${isExpanded ? "is-expanded" : ""} ${isTerminee ? "is-neutral" : ""}`}>
@@ -289,8 +313,8 @@ export default function ContractSessionsPage() {
           </div>
 
           <div className="seance-card-badges">
-            <span className="seance-badge">{seance.candidats.length} candidat{seance.candidats.length > 1 ? "s" : ""}</span>
-            <span className="seance-badge">{sentCount} dossier{sentCount > 1 ? "s" : ""}</span>
+            <span className="seance-badge">{displayedCandidatesCount} candidat{displayedCandidatesCount > 1 ? "s" : ""}</span>
+            <span className="seance-badge">{displayedDossierCount} dossier{displayedDossierCount > 1 ? "s" : ""}</span>
             <span className={`status-badge ${isTerminee ? "is-done" : "is-open"}`}>
               {seanceStatusLabel(seance.statutSeance)}
             </span>
@@ -327,6 +351,13 @@ export default function ContractSessionsPage() {
         {isExpanded && (
           <div className="session-details seance-card-body">
             {isTerminee && <div className="session-note">Cette séance est terminée.</div>}
+            {isTerminee && (
+              <div className="session-note session-note-stats">
+                <span>Présents : {nbPresents}</span>
+                <span>Absents : {nbAbsents}</span>
+                <span>Date clôture : {formatDateClotureSeance(dateCloture)}</span>
+              </div>
+            )}
             {seance.candidats.length === 0 ? (
               <div className="session-empty">Aucun candidat dans cette séance.</div>
             ) : (

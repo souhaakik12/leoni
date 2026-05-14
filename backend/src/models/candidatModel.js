@@ -1,5 +1,9 @@
 const sql = require("mssql");
 const config = require("../../config");
+const {
+    enregistrerActionContrat,
+    resolveActionActor: resolveContractActionActor,
+} = require("./contratActionModel");
 
 const CANAL_CANDIDAT = "Candidat";
 const ETAPE_CANDIDAT = "CANDIDAT";
@@ -7,6 +11,7 @@ const STATUT_NOUVEAU = "Nouveau";
 const TYPE_CANDIDATURE = "NOUVEAU";
 const CONTRACT_TYPES_SIX_MONTHS = new Set(["CDI", "2CDI", "CDI SANS ESSAI", "CDD"]);
 const CONTRACT_TYPES_TWELVE_MONTHS = new Set(["CAIP", "CIVP", "SIVP"]);
+const DOSSIER_ALLOWED_ETAPES = new Set(["DOSSIER_CONTRAT", "CONTRAT_A_SIGNER"]);
 
 class CandidatContractError extends Error {
     constructor(message, status = 500) {
@@ -65,6 +70,47 @@ function toBooleanFlag(value) {
     return false;
 }
 
+function normalizeFamilyStatus(value) {
+    return String(value ?? "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ");
+}
+
+function isMarriedStatus(value) {
+    const normalized = normalizeFamilyStatus(value);
+    if (!normalized || normalized.includes("non marie")) return false;
+    return normalized.includes("marie");
+}
+
+function normalizeWorkflowStep(value) {
+    return String(value ?? "").trim().toUpperCase();
+}
+
+function resolveMovementActor(user) {
+    const rawUserId = user?.id ?? user?.Id ?? null;
+    const normalizedUserId = Number.parseInt(rawUserId, 10);
+    const utilisateurNom = String(
+        user?.nom || user?.name || user?.NomComplet || user?.nomComplet || ""
+    ).trim() || "Utilisateur inconnu";
+    const utilisateurRole = String(user?.role || user?.Role || "").trim() || null;
+
+    return {
+        utilisateur_id: Number.isInteger(normalizedUserId) && normalizedUserId > 0 ? normalizedUserId : null,
+        utilisateur_nom: utilisateurNom,
+        utilisateur_role: utilisateurRole,
+    };
+}
+
+function bindMovementActor(request, actor = {}) {
+    return request
+        .input("utilisateur_id", sql.Int, actor.utilisateur_id ?? null)
+        .input("utilisateur_nom", sql.NVarChar(255), actor.utilisateur_nom || "Utilisateur inconnu")
+        .input("utilisateur_role", sql.NVarChar(100), actor.utilisateur_role ?? null);
+}
+
 async function findCandidatByCin(cin) {
     const pool = await sql.connect(config);
     const result = await pool.request()
@@ -94,13 +140,18 @@ async function getCandidateSchema(pool) {
     return schemaResult.recordset?.[0] || {};
 }
 
-async function createCandidat(data) {
+async function createCandidat(data, user = null) {
     const pool = await sql.connect(config);
-    const schema = await getCandidateSchema(pool);
+    const transaction = new sql.Transaction(pool);
+    const actor = resolveMovementActor(user);
+
+    try {
+        await transaction.begin();
+        const schema = await getCandidateSchema(transaction);
     const columns = ["nom", "cin", "telephone", "poste", "genre"];
     const values = ["@nom", "@cin", "@telephone", "@poste", "@genre"];
 
-    const request = pool.request()
+    const request = transaction.request()
         .input("nom", sql.VarChar, data.nom)
         .input("cin", sql.VarChar, data.cin)
         .input("telephone", sql.VarChar, data.telephone)
@@ -164,7 +215,60 @@ async function createCandidat(data) {
     `;
 
     const result = await request.query(query);
-    return result.recordset?.[0] || null;
+        const candidat = result.recordset?.[0] || null;
+
+        if (candidat) {
+            await bindMovementActor(
+                transaction.request()
+                    .input("candidat_id", sql.Int, Number(candidat.id))
+                    .input("ancienne_etape", sql.VarChar(50), null)
+                    .input("nouvelle_etape", sql.VarChar(50), candidat.etape || ETAPE_CANDIDAT)
+                    .input("action", sql.NVarChar(255), "Ajout candidat")
+                    .input("commentaire", sql.NVarChar(sql.MAX), null),
+                actor
+            ).query(`
+                IF OBJECT_ID('dbo.candidat_mouvements', 'U') IS NOT NULL
+                BEGIN
+                    INSERT INTO dbo.candidat_mouvements
+                    (
+                        candidat_id,
+                        ancienne_etape,
+                        nouvelle_etape,
+                        action,
+                        commentaire,
+                        utilisateur_id,
+                        utilisateur_nom,
+                        utilisateur_role,
+                        created_at
+                    )
+                    VALUES
+                    (
+                        @candidat_id,
+                        @ancienne_etape,
+                        @nouvelle_etape,
+                        @action,
+                        @commentaire,
+                        @utilisateur_id,
+                        @utilisateur_nom,
+                        @utilisateur_role,
+                        GETDATE()
+                    );
+                END
+            `);
+        }
+
+        await transaction.commit();
+        return candidat;
+    } catch (error) {
+        try {
+            if (!transaction._aborted) {
+                await transaction.rollback();
+            }
+        } catch (rollbackError) {
+            console.error("Rollback createCandidat:", rollbackError);
+        }
+        throw error;
+    }
 }
 
 async function updateCandidat(id, data) {
@@ -216,6 +320,136 @@ async function updateCandidat(id, data) {
 
     const result = await request.query(query);
     return result.recordset?.[0] || null;
+}
+
+async function updateWorkflowStepWithMovement(candidateId, nextEtape, nextStatut, action, commentaire = null, user = null) {
+    const normalizedCandidateId = Number(candidateId);
+    const trimmedNextEtape = String(nextEtape ?? "").trim();
+    const trimmedNextStatut = typeof nextStatut === "string" ? nextStatut.trim() : "";
+    const trimmedAction = String(action ?? "").trim();
+    const trimmedCommentaire = typeof commentaire === "string" ? commentaire.trim() : "";
+    const actor = resolveMovementActor(user);
+
+    if (!Number.isInteger(normalizedCandidateId) || normalizedCandidateId <= 0) {
+        throw new CandidatContractError("Identifiant candidat invalide.", 400);
+    }
+
+    if (!trimmedNextEtape) {
+        throw new CandidatContractError("Etape cible invalide.", 400);
+    }
+
+    const pool = await sql.connect(config);
+    const transaction = new sql.Transaction(pool);
+
+    try {
+        await transaction.begin();
+
+        const candidateResult = await transaction.request()
+            .input("id", sql.Int, normalizedCandidateId)
+            .query(`
+                SELECT TOP 1
+                    id,
+                    etape,
+                    statut
+                FROM dbo.candidats WITH (UPDLOCK, HOLDLOCK)
+                WHERE id = @id;
+            `);
+
+        const candidate = candidateResult.recordset?.[0] || null;
+        if (!candidate) {
+            throw new CandidatContractError("Candidat introuvable.", 404);
+        }
+
+        const previousEtape = String(candidate.etape ?? "").trim();
+        const previousStatut = String(candidate.statut ?? "").trim();
+        const sameTargetStep = normalizeWorkflowStep(previousEtape) === normalizeWorkflowStep(trimmedNextEtape);
+
+        const request = transaction.request()
+            .input("id", sql.Int, normalizedCandidateId)
+            .input("next_etape", sql.VarChar(50), trimmedNextEtape);
+
+        const setClauses = ["etape = @next_etape"];
+
+        if (trimmedNextStatut) {
+            setClauses.push("statut = @next_statut");
+            request.input("next_statut", sql.VarChar(80), trimmedNextStatut);
+        }
+
+        const updateResult = await request.query(`
+            UPDATE dbo.candidats
+            SET ${setClauses.join(", ")}
+            OUTPUT INSERTED.id, INSERTED.etape, INSERTED.statut
+            WHERE id = @id;
+        `);
+
+        const updatedCandidate = updateResult.recordset?.[0] || null;
+        if (!updatedCandidate) {
+            throw new CandidatContractError("Mise a jour de l'etape impossible.", 500);
+        }
+
+        let movementInserted = false;
+        if (!sameTargetStep && trimmedAction && candidate.etape !== undefined) {
+            await bindMovementActor(
+                transaction.request()
+                    .input("candidat_id", sql.Int, normalizedCandidateId)
+                    .input("ancienne_etape", sql.VarChar(50), previousEtape || null)
+                    .input("nouvelle_etape", sql.VarChar(50), trimmedNextEtape)
+                    .input("action", sql.NVarChar(255), trimmedAction)
+                    .input("commentaire", sql.NVarChar(sql.MAX), trimmedCommentaire || null),
+                actor
+            ).query(`
+                    IF OBJECT_ID('dbo.candidat_mouvements', 'U') IS NOT NULL
+                    BEGIN
+                        INSERT INTO dbo.candidat_mouvements
+                        (
+                            candidat_id,
+                            ancienne_etape,
+                            nouvelle_etape,
+                            action,
+                            commentaire,
+                            utilisateur_id,
+                            utilisateur_nom,
+                            utilisateur_role,
+                            created_at
+                        )
+                        VALUES
+                        (
+                            @candidat_id,
+                            @ancienne_etape,
+                            @nouvelle_etape,
+                            @action,
+                            @commentaire,
+                            @utilisateur_id,
+                            @utilisateur_nom,
+                            @utilisateur_role,
+                            GETDATE()
+                        );
+                    END
+                `);
+            movementInserted = true;
+        }
+
+        await transaction.commit();
+
+        return {
+            candidate: {
+                ...updatedCandidate,
+                statut: updatedCandidate.statut ?? previousStatut ?? null,
+            },
+            movementInserted,
+            previousEtape: previousEtape || null,
+            nextEtape: trimmedNextEtape,
+        };
+    } catch (error) {
+        try {
+            if (!transaction._aborted) {
+                await transaction.rollback();
+            }
+        } catch (rollbackError) {
+            console.error("Rollback updateWorkflowStepWithMovement:", rollbackError);
+        }
+        throw error;
+    }
 }
 
 async function deleteCandidat(id) {
@@ -330,7 +564,7 @@ async function deleteCandidat(id) {
     }
 }
 
-async function signerContratCandidat(candidatId, typeContrat) {
+async function signerContratCandidat(candidatId, typeContrat, actionUser = null) {
     const normalizedCandidateId = Number(candidatId);
     const normalizedTypeContrat = normalizeContractType(typeContrat);
 
@@ -344,6 +578,7 @@ async function signerContratCandidat(candidatId, typeContrat) {
 
     const pool = await sql.connect(config);
     const transaction = new sql.Transaction(pool);
+    const actor = resolveContractActionActor(actionUser);
 
     try {
         await transaction.begin();
@@ -389,6 +624,7 @@ async function signerContratCandidat(candidatId, typeContrat) {
         const now = new Date();
         const dateDebut = new Date(now);
         const dateFin = computeContractEndDate(dateDebut, normalizedTypeContrat);
+        const traitePar = actor.utilisateur_nom || null;
         const dossierValide = toBooleanFlag(candidat.dossier_valide);
         const finalise = dossierValide;
         const nextEtape = finalise ? "NOUVEAU_RECRUTE" : candidat.etape;
@@ -433,6 +669,7 @@ async function signerContratCandidat(candidatId, typeContrat) {
             .input("date_debut", sql.DateTime, dateDebut)
             .input("date_fin", sql.DateTime, dateFin)
             .input("statut_contrat", sql.VarChar(20), "ACTIF")
+            .input("traite_par", sql.NVarChar(255), traitePar)
             .query(`
                 INSERT INTO dbo.contrats (
                     candidat_id,
@@ -442,7 +679,8 @@ async function signerContratCandidat(candidatId, typeContrat) {
                     date_fin,
                     statut_contrat,
                     contrat_parent_id,
-                    date_creation
+                    date_creation,
+                    traite_par
                 )
                 OUTPUT INSERTED.id
                 VALUES (
@@ -453,9 +691,21 @@ async function signerContratCandidat(candidatId, typeContrat) {
                     @date_fin,
                     @statut_contrat,
                     NULL,
-                    GETDATE()
+                    GETDATE(),
+                    @traite_par
                 );
             `);
+
+        await enregistrerActionContrat(transaction, {
+            id_contrat: contratInsertResult.recordset?.[0]?.id || null,
+            source_donnee: "SYSTEME",
+            candidat_id: normalizedCandidateId,
+            cin: candidat.cin || null,
+            nom_prenom: candidat.nom || null,
+            action_type: "SIGNATURE_CONTRAT",
+            action_description: `Contrat signe par ${actor.utilisateur_nom}`,
+            ...actor,
+        });
 
         await transaction.commit();
 
@@ -469,6 +719,7 @@ async function signerContratCandidat(candidatId, typeContrat) {
             date_debut: dateDebut,
             date_fin: dateFin,
             statut_contrat: "ACTIF",
+            traite_par: traitePar || "-",
             etape: updatedCandidat.etape || nextEtape || null,
             statut: updatedCandidat.statut || nextStatut || null,
             finalise,
@@ -487,12 +738,171 @@ async function signerContratCandidat(candidatId, typeContrat) {
     }
 }
 
+async function validerDossierContrat(candidatId, actionUser = null) {
+    const normalizedCandidateId = Number(candidatId);
+
+    if (!Number.isInteger(normalizedCandidateId) || normalizedCandidateId <= 0) {
+        throw new CandidatContractError("Identifiant candidat invalide.", 400);
+    }
+
+    const pool = await sql.connect(config);
+    const transaction = new sql.Transaction(pool);
+    const actor = resolveContractActionActor(actionUser);
+
+    try {
+        await transaction.begin();
+
+        const candidatResult = await transaction.request()
+            .input("id", sql.Int, normalizedCandidateId)
+            .query(`
+                SELECT TOP 1
+                    id,
+                    nom,
+                    cin,
+                    UPPER(LTRIM(RTRIM(ISNULL(etape, '')))) AS etape,
+                    ISNULL(contrat_signe, 0) AS contrat_signe,
+                    ISNULL(dossier_valide, 0) AS dossier_valide,
+                    ISNULL(statut, '') AS statut,
+                    situation_familiale
+                FROM dbo.candidats
+                WHERE id = @id;
+            `);
+
+        const candidat = candidatResult.recordset?.[0] || null;
+        if (!candidat) {
+            throw new CandidatContractError("Candidat introuvable.", 404);
+        }
+
+        if (!DOSSIER_ALLOWED_ETAPES.has(candidat.etape)) {
+            throw new CandidatContractError(
+                "Le dossier contrat peut etre valide seulement pour les candidats en dossier contrat ou contrat a signer.",
+                409
+            );
+        }
+
+        const isMarried = isMarriedStatus(candidat.situation_familiale);
+
+        const documentsResult = await transaction.request()
+            .input("candidat_id", sql.Int, normalizedCandidateId)
+            .input("is_married", sql.Bit, isMarried ? 1 : 0)
+            .query(`
+                SELECT
+                    COUNT(1) AS total_documents,
+                    SUM(CASE WHEN ISNULL(cdc.est_recu, 0) = 1 THEN 1 ELSE 0 END) AS received_documents
+                FROM dbo.types_documents_contrat td
+                LEFT JOIN dbo.candidat_documents_contrat cdc
+                    ON cdc.candidat_id = @candidat_id
+                   AND cdc.type_document_id = td.id
+                WHERE ISNULL(td.actif, 1) = 1
+                  AND (ISNULL(td.familial, 0) = 0 OR @is_married = 1);
+            `);
+
+        const totalDocuments = Number(documentsResult.recordset?.[0]?.total_documents || 0);
+        const receivedDocuments = Number(documentsResult.recordset?.[0]?.received_documents || 0);
+
+        if (totalDocuments === 0 || receivedDocuments < totalDocuments) {
+            throw new CandidatContractError(
+                "Le dossier ne peut pas etre valide : documents manquants.",
+                409
+            );
+        }
+
+        const schemaResult = await transaction.request().query(`
+            SELECT
+                CASE WHEN COL_LENGTH('dbo.candidats', 'statut_dossier') IS NULL THEN 0 ELSE 1 END AS has_statut_dossier,
+                CASE WHEN COL_LENGTH('dbo.candidats', 'statut') IS NULL THEN 0 ELSE 1 END AS has_statut,
+                CASE WHEN COL_LENGTH('dbo.candidats', 'etape') IS NULL THEN 0 ELSE 1 END AS has_etape;
+        `);
+        const schema = schemaResult.recordset?.[0] || {};
+        const hasStatutDossier = Boolean(schema.has_statut_dossier);
+        const hasStatut = Boolean(schema.has_statut);
+        const hasEtape = Boolean(schema.has_etape);
+
+        const finalise = toBooleanFlag(candidat.contrat_signe);
+        const setClauses = ["dossier_valide = 1"];
+
+        if (hasStatutDossier) {
+            setClauses.push("statut_dossier = 'VALIDE'");
+        }
+        if (finalise && hasEtape) {
+            setClauses.push("etape = 'NOUVEAU_RECRUTE'");
+        }
+        if (finalise && hasStatut) {
+            setClauses.push("statut = 'CONTRAT_FINALISE'");
+        }
+
+        const updateResult = await transaction.request()
+            .input("id", sql.Int, normalizedCandidateId)
+            .query(`
+                UPDATE dbo.candidats
+                SET ${setClauses.join(", ")}
+                OUTPUT
+                    INSERTED.id,
+                    INSERTED.contrat_signe,
+                    INSERTED.dossier_valide,
+                    ${hasStatutDossier ? "INSERTED.statut_dossier" : "CAST('VALIDE' AS VARCHAR(50)) AS statut_dossier"},
+                    ${hasEtape ? "INSERTED.etape" : "CAST(NULL AS VARCHAR(50)) AS etape"},
+                    ${hasStatut ? "INSERTED.statut" : "CAST(NULL AS VARCHAR(80)) AS statut"}
+                WHERE id = @id;
+            `);
+
+        const updatedCandidat = updateResult.recordset?.[0] || null;
+        if (!updatedCandidat) {
+            throw new CandidatContractError("Validation du dossier impossible.", 500);
+        }
+
+        const contractLinkResult = await transaction.request()
+            .input("candidat_id", sql.Int, normalizedCandidateId)
+            .query(`
+                SELECT TOP 1
+                    id
+                FROM dbo.contrats
+                WHERE candidat_id = @candidat_id
+                ORDER BY id DESC;
+            `);
+
+        await enregistrerActionContrat(transaction, {
+            id_contrat: contractLinkResult.recordset?.[0]?.id || null,
+            source_donnee: contractLinkResult.recordset?.[0]?.id ? "SYSTEME" : null,
+            candidat_id: normalizedCandidateId,
+            cin: candidat.cin || null,
+            nom_prenom: candidat.nom || null,
+            action_type: "VALIDATION_DOSSIER",
+            action_description: `Dossier contrat valide par ${actor.utilisateur_nom}`,
+            ...actor,
+        });
+
+        await transaction.commit();
+
+        return {
+            candidat_id: normalizedCandidateId,
+            contrat_signe: toBooleanFlag(updatedCandidat.contrat_signe),
+            dossier_valide: toBooleanFlag(updatedCandidat.dossier_valide),
+            statut_dossier: updatedCandidat.statut_dossier || "VALIDE",
+            etape: updatedCandidat.etape || null,
+            statut: updatedCandidat.statut || null,
+            finalise,
+        };
+    } catch (error) {
+        try {
+            if (!transaction._aborted) {
+                await transaction.rollback();
+            }
+        } catch (rollbackError) {
+            console.error("Rollback validerDossierContrat:", rollbackError);
+        }
+        throw error;
+    }
+}
+
 module.exports = {
     createCandidat,
     updateCandidat,
+    updateWorkflowStepWithMovement,
     deleteCandidat,
     findCandidatByCin,
     signerContratCandidat,
+    validerDossierContrat,
     CandidatContractError,
     CANAL_CANDIDAT,
     ETAPE_CANDIDAT,

@@ -21,6 +21,32 @@ function normalizeResult(rawResult) {
     return null;
 }
 
+function normalizeWorkflowStep(value) {
+    return String(value ?? "").trim().toUpperCase();
+}
+
+function resolveMovementActor(user) {
+    const rawUserId = user?.id ?? user?.Id ?? null;
+    const normalizedUserId = Number.parseInt(rawUserId, 10);
+    const utilisateurNom = String(
+        user?.nom || user?.name || user?.NomComplet || user?.nomComplet || ""
+    ).trim() || "Utilisateur inconnu";
+    const utilisateurRole = String(user?.role || user?.Role || "").trim() || null;
+
+    return {
+        utilisateur_id: Number.isInteger(normalizedUserId) && normalizedUserId > 0 ? normalizedUserId : null,
+        utilisateur_nom: utilisateurNom,
+        utilisateur_role: utilisateurRole,
+    };
+}
+
+function bindMovementActor(request, actor = {}) {
+    return request
+        .input("utilisateur_id", sql.Int, actor.utilisateur_id ?? null)
+        .input("utilisateur_nom", sql.NVarChar(255), actor.utilisateur_nom || "Utilisateur inconnu")
+        .input("utilisateur_role", sql.NVarChar(100), actor.utilisateur_role ?? null);
+}
+
 async function getCandidateById(pool, candidatId) {
     const result = await pool.request()
         .input("candidat_id", sql.Int, candidatId)
@@ -51,6 +77,7 @@ exports.createTestEntretien = async (req, res) => {
 
     let pool;
     let transaction;
+    const actor = resolveMovementActor(req.user);
 
     try {
         pool = await sql.connect(config);
@@ -196,6 +223,9 @@ exports.createTestEntretien = async (req, res) => {
             closedOldPendingCount = closeOldPendingResult.rowsAffected?.[0] || 0;
         }
 
+        const candidateRow = candidate.recordset?.[0] || null;
+        const previousEtape = String(candidateRow?.etape ?? "").trim();
+
         if (resultatEntretien === RESULT_OK) {
             await transaction.request()
                 .input("candidat_id", sql.Int, candidatId)
@@ -207,6 +237,46 @@ exports.createTestEntretien = async (req, res) => {
                         statut = @next_statut
                     WHERE id = @candidat_id;
                 `);
+
+            if (normalizeWorkflowStep(previousEtape) !== "SEANCE_INFO") {
+                await transaction.request()
+                    .input("candidat_id", sql.Int, candidatId)
+                    .input("ancienne_etape", sql.VarChar(50), previousEtape || "TEST_ENTRETIEN")
+                    .input("nouvelle_etape", sql.VarChar(50), "SEANCE_INFO")
+                    .input("action", sql.NVarChar(255), "Entretien OK - Envoyer vers Séance Contrat")
+                    .input("utilisateur_id", sql.Int, actor.utilisateur_id ?? null)
+                    .input("utilisateur_nom", sql.NVarChar(255), actor.utilisateur_nom || "Utilisateur inconnu")
+                    .input("utilisateur_role", sql.NVarChar(100), actor.utilisateur_role ?? null)
+                    .query(`
+                        IF OBJECT_ID('dbo.candidat_mouvements', 'U') IS NOT NULL
+                        BEGIN
+                            INSERT INTO dbo.candidat_mouvements
+                            (
+                                candidat_id,
+                                ancienne_etape,
+                                nouvelle_etape,
+                                action,
+                                commentaire,
+                                utilisateur_id,
+                                utilisateur_nom,
+                                utilisateur_role,
+                                created_at
+                            )
+                            VALUES
+                            (
+                                @candidat_id,
+                                @ancienne_etape,
+                                @nouvelle_etape,
+                                @action,
+                                NULL,
+                                @utilisateur_id,
+                                @utilisateur_nom,
+                                @utilisateur_role,
+                                GETDATE()
+                            );
+                        END
+                    `);
+            }
         } else {
             // NOK or En attente: keep candidate in TEST_ENTRETIEN stage with Nouveau status.
             await transaction.request()

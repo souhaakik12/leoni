@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useRecrutements } from "../context/RecrutementsContext.jsx";
+import { buildRoleHeaders } from "../utils/roles.js";
 import "./CandidatDossierPage.css";
 
 const testOptions = [
@@ -447,9 +448,9 @@ export default function CandidatDossierPage() {
 
       const response = await fetch("http://localhost:3000/api/test-entretien", {
         method: "POST",
-        headers: {
+        headers: buildRoleHeaders(user, {
           "Content-Type": "application/json",
-        },
+        }),
         body: JSON.stringify({
           candidat_id: candidat.id,
           test_effectue: form.testPasse,

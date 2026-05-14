@@ -87,21 +87,28 @@ function computeCandidateWorkflow(candidate, documentsByCandidateId = {}) {
   const dossierValide = toBooleanFlag(candidate?.dossierValide ?? candidate?.dossier_valide);
   const etape = String(candidate?.etape || "").trim().toUpperCase();
   const statut = String(candidate?.statut || "").trim().toUpperCase();
-  const finalise = etape === "NOUVEAU_RECRUTE" || statut === "CONTRAT_FINALISE";
+  const statutDossier = String(candidate?.statutDossier || candidate?.statut_dossier || "").trim().toUpperCase();
+  const finalise = etape === "NOUVEAU_RECRUTE" || statut === "CONTRAT_FINALISE" || (contratSigne && dossierValide);
+  const dossierClasseValide = dossierValide || statutDossier === "VALIDE" || statut === "CONTRAT_FINALISE";
 
   return {
     progress,
     contratSigne,
     dossierValide,
+    dossierClasseValide,
     finalise,
   };
 }
 
 export default function ContractOnboardingPanel() {
+  const TAB_EN_COURS = "en_cours";
+  const TAB_VALIDES = "valides";
   const navigate = useNavigate();
   const { user } = useAuth();
   const { candidats, validerDossierContrat, signerContratCandidat, setCandidatTypeContrat } = useRecrutements();
   const [toast, setToast] = useState({ message: "", type: "info" });
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState(TAB_EN_COURS);
   const [maritalStatusDrafts, setMaritalStatusDrafts] = useState({});
   const [documentsByCandidateId, setDocumentsByCandidateId] = useState({});
   const [documentsAttemptedByCandidateId, setDocumentsAttemptedByCandidateId] = useState({});
@@ -113,10 +120,48 @@ export default function ContractOnboardingPanel() {
   const queue = useMemo(
     () =>
       candidats.filter((candidate) => {
+        const workflow = computeCandidateWorkflow(candidate, documentsByCandidateId);
         const etape = String(candidate?.etape || "").trim().toUpperCase();
-        return etape === "DOSSIER_CONTRAT" || etape === "CONTRAT_A_SIGNER";
+        const isContractStage = etape === "DOSSIER_CONTRAT" || etape === "CONTRAT_A_SIGNER";
+        return isContractStage || workflow.dossierClasseValide || workflow.finalise;
       }),
-    [candidats]
+    [candidats, documentsByCandidateId]
+  );
+
+  const searchedQueue = useMemo(() => {
+    const normalizedSearch = norm(searchTerm).trim();
+    if (!normalizedSearch) return queue;
+
+    return queue.filter((candidate) => {
+      const name = norm(candidate?.nomComplet || candidate?.nom || "");
+      const cin = norm(candidate?.cin || "");
+      const typeContrat = norm(candidate?.type_contrat || candidate?.typeContrat || "");
+      return (
+        name.includes(normalizedSearch) ||
+        cin.includes(normalizedSearch) ||
+        typeContrat.includes(normalizedSearch)
+      );
+    });
+  }, [queue, searchTerm]);
+
+  const ongoingQueue = useMemo(
+    () =>
+      searchedQueue.filter((candidate) => {
+        const workflow = computeCandidateWorkflow(candidate, documentsByCandidateId);
+        const etape = String(candidate?.etape || "").trim().toUpperCase();
+        const isContractStage = etape === "DOSSIER_CONTRAT" || etape === "CONTRAT_A_SIGNER";
+        return isContractStage && !workflow.dossierClasseValide && !workflow.finalise;
+      }),
+    [searchedQueue, documentsByCandidateId]
+  );
+
+  const validatedQueue = useMemo(
+    () =>
+      searchedQueue.filter((candidate) => {
+        const workflow = computeCandidateWorkflow(candidate, documentsByCandidateId);
+        return workflow.dossierClasseValide || workflow.finalise;
+      }),
+    [searchedQueue, documentsByCandidateId]
   );
 
   const pushToast = (message, type = "info", timeout = 2800) => {
@@ -173,9 +218,9 @@ export default function ContractOnboardingPanel() {
   };
 
   useEffect(() => {
-    if (!user || queue.length === 0) return;
+    if (!user || ongoingQueue.length === 0) return;
 
-    queue.forEach((candidate) => {
+    ongoingQueue.forEach((candidate) => {
       if (
         documentsAttemptedByCandidateId[candidate.id] ||
         documentsByCandidateId[candidate.id] ||
@@ -185,7 +230,7 @@ export default function ContractOnboardingPanel() {
       }
       void loadCandidateDocuments(candidate.id, { silent: true });
     });
-  }, [queue, user, documentsAttemptedByCandidateId, documentsByCandidateId, documentsLoadingByCandidateId]);
+  }, [ongoingQueue, user, documentsAttemptedByCandidateId, documentsByCandidateId, documentsLoadingByCandidateId]);
 
   const toggleExpanded = (candidateId) => {
     const shouldExpand = expandedCandidateId !== candidateId;
@@ -245,7 +290,7 @@ export default function ContractOnboardingPanel() {
       return;
     }
     if (!workflow.progress.isComplete) {
-      pushToast(`Dossier incomplet pour ${candidate.nomComplet}.`, "error", 3200);
+      pushToast("Le dossier ne peut pas etre valide : documents manquants.", "error", 3200);
       return;
     }
 
@@ -321,6 +366,9 @@ export default function ContractOnboardingPanel() {
     }
   };
 
+  const activeQueue = activeTab === TAB_VALIDES ? validatedQueue : ongoingQueue;
+  const hasTrackedCandidates = ongoingQueue.length > 0 || validatedQueue.length > 0;
+
   return (
     <section className="dossier-board">
       {toast.message && <div className={`dossier-toast ${toast.type}`}>{toast.message}</div>}
@@ -332,15 +380,48 @@ export default function ContractOnboardingPanel() {
         </div>
         <div className="dossier-board-kpi">
           <strong>{queue.length}</strong>
-          <span>Candidats en cours</span>
+          <span>Dossiers suivis</span>
         </div>
       </header>
 
-      {queue.length === 0 ? (
+      <div className="dossier-search-row">
+        <label className="dossier-search-field">
+          <span>Recherche</span>
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Rechercher par nom, CIN ou type de contrat"
+          />
+        </label>
+      </div>
+
+      <div className="dossier-tabs">
+        <button
+          className={`dossier-tab ${activeTab === TAB_EN_COURS ? "active" : ""}`}
+          onClick={() => setActiveTab(TAB_EN_COURS)}
+          type="button"
+        >
+          Dossiers en cours
+          <span>{ongoingQueue.length}</span>
+        </button>
+        <button
+          className={`dossier-tab ${activeTab === TAB_VALIDES ? "active" : ""}`}
+          onClick={() => setActiveTab(TAB_VALIDES)}
+          type="button"
+        >
+          Dossiers valides
+          <span>{validatedQueue.length}</span>
+        </button>
+      </div>
+
+      {!hasTrackedCandidates ? (
         <div className="dossier-empty-state">Aucun candidat a l'etape DOSSIER_CONTRAT.</div>
+      ) : activeQueue.length === 0 ? (
+        <div className="dossier-empty-state">Aucun candidat trouve.</div>
       ) : (
         <div className="dossier-list">
-          {queue.map((candidate) => {
+          {activeQueue.map((candidate) => {
             const workflow = computeCandidateWorkflow(candidate, documentsByCandidateId);
             const progress = workflow.progress;
             const typeContrat = normalizeContractType(candidate.type_contrat || candidate.typeContrat) || "Non renseigne";
@@ -356,9 +437,13 @@ export default function ContractOnboardingPanel() {
             const isSavingType = Boolean(savingTypeDrafts[candidate.id]);
             const canSignContract = Boolean(normalizeContractType(candidate?.type_contrat || candidate?.typeContrat));
             const isExpanded = expandedCandidateId === candidate.id;
+            const showValidatedView = activeTab === TAB_VALIDES;
 
             return (
-              <article key={candidate.id} className={`dossier-card-compact ${isExpanded ? "expanded" : ""}`}>
+              <article
+                key={candidate.id}
+                className={`dossier-card-compact ${isExpanded ? "expanded" : ""} ${showValidatedView ? "validated" : ""}`}
+              >
                 <div className="dossier-summary-top">
                   <div>
                     <h4>{candidate.nomComplet || "Candidat sans nom"}</h4>
@@ -372,29 +457,48 @@ export default function ContractOnboardingPanel() {
                   </div>
                 </div>
 
-                <div className="summary-progress-row">
-                  <div className="summary-progress-label">
-                    <span>Progression documents</span>
-                    <strong>{progress.doneCount}/{progress.total}</strong>
+                {showValidatedView ? (
+                  <div className="validated-summary-grid">
+                    <div>
+                      <span>Statut contrat</span>
+                      <strong>{candidate?.statutContrat || candidate?.statut_contrat || contratLabel}</strong>
+                    </div>
+                    <div>
+                      <span>Statut dossier</span>
+                      <strong>{candidate?.statutDossier || candidate?.statut_dossier || "VALIDE"}</strong>
+                    </div>
+                    <div>
+                      <span>Date signature</span>
+                      <strong>{formatDateTime(candidate?.dateSignature || candidate?.date_signature)}</strong>
+                    </div>
                   </div>
-                  <div className="dossier-progress-track compact">
-                    <div
-                      className={`dossier-progress-fill ${progress.isComplete ? "ok" : "warn"}`}
-                      style={{ width: `${progress.percent}%` }}
-                    />
+                ) : (
+                  <div className="summary-progress-row">
+                    <div className="summary-progress-label">
+                      <span>Progression documents</span>
+                      <strong>{progress.doneCount}/{progress.total}</strong>
+                    </div>
+                    <div className="dossier-progress-track compact">
+                      <div
+                        className={`dossier-progress-fill ${progress.isComplete ? "ok" : "warn"}`}
+                        style={{ width: `${progress.percent}%` }}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
 
-                <div className="summary-main-actions">
-                  <button className="btn-secondary" onClick={() => openCandidateDossier(candidate.id)} type="button">
-                    Consulter dossier
-                  </button>
-                  <button className="btn-toggle-docs" onClick={() => toggleExpanded(candidate.id)} type="button">
-                    {isExpanded ? "Masquer les documents" : "Afficher les documents"}
-                  </button>
-                </div>
+                {!showValidatedView && (
+                  <div className="summary-main-actions">
+                    <button className="btn-secondary" onClick={() => openCandidateDossier(candidate.id)} type="button">
+                      Consulter dossier
+                    </button>
+                    <button className="btn-toggle-docs" onClick={() => toggleExpanded(candidate.id)} type="button">
+                      {isExpanded ? "Masquer les documents" : "Afficher les documents"}
+                    </button>
+                  </div>
+                )}
 
-                {isExpanded && (
+                {isExpanded && !showValidatedView && (
                   <div className="dossier-expand-panel">
                     <div className="expand-status-line">
                       <span>

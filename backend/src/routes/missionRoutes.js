@@ -7,6 +7,7 @@ router.get("/assigned/:userId", missionController.getAssignedMissions);
 router.get("/responsables", missionController.getResponsables);
 router.get("/", missionController.getMissions);
 router.post("/", missionController.createMission);
+router.put("/:id/resultat", missionController.updateMissionResult);
 router.put("/:id", missionController.updateMission);
 router.delete("/:id", missionController.deleteMission);
 

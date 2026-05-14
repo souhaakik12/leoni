@@ -76,6 +76,11 @@ function toDisplayDate(value) {
   return `${day}/${month}/${year}`;
 }
 
+function todayIso() {
+  const now = new Date();
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+}
+
 function splitVille(mission) {
   if (normalizeText(mission?.Gouvernorat) || normalizeText(mission?.Delegation)) {
     return {
@@ -119,12 +124,57 @@ function resolveMissionLocation(mission) {
   return normalizeText(mission?.ville) || buildVille(mission?.Gouvernorat, mission?.Delegation);
 }
 
+function getPotentialCandidatesCount(mission) {
+  const directValue = mission?.NombreCandidatsPotentiels ?? mission?.nombreCandidatsPotentiels;
+  if (directValue !== undefined && directValue !== null && directValue !== "") {
+    const parsed = Number(directValue);
+    if (Number.isInteger(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  const rawResult = normalizeText(mission?.ResultatMission || mission?.resultatMission);
+  const comparableResult = rawResult
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  if (/^\d+$/.test(comparableResult)) {
+    return Number(comparableResult);
+  }
+
+  if (!comparableResult.includes("resultat saisi") && !comparableResult.includes("candidat")) {
+    return null;
+  }
+
+  const match = rawResult.match(/(\d+)/);
+  if (!match) return null;
+
+  const parsed = Number(match[1]);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function getMissionDisplayStatus(mission) {
+  if (getPotentialCandidatesCount(mission) !== null) {
+    return COMPLETED_STATUS;
+  }
+
+  const missionDate = toIsoDate(mission?.DateMission || mission?.date);
+  if (!missionDate) {
+    return normalizeText(mission?.statutAffichage || mission?.statut || mission?.Statut) || PLANIFIED_STATUS;
+  }
+
+  const currentDate = todayIso();
+  if (missionDate > currentDate) return PLANIFIED_STATUS;
+  if (missionDate < currentDate) return COMPLETED_STATUS;
+  return IN_PROGRESS_STATUS;
+}
+
 function getStatutStyle(status) {
   return statutConfig[status] || defaultStatutStyle;
 }
 
 function getPlanningMissions(list) {
-  const todayIso = toIsoDate(new Date());
+  const currentDate = todayIso();
   const sorted = [...list]
     .filter((mission) => toIsoDate(mission.DateMission || mission.date))
     .sort((left, right) => {
@@ -135,16 +185,18 @@ function getPlanningMissions(list) {
 
   const upcoming = sorted.filter((mission) => {
     const missionDate = toIsoDate(mission.DateMission || mission.date);
-    return !todayIso || missionDate >= todayIso;
+    return !currentDate || missionDate >= currentDate;
   });
 
-  return (upcoming.length ? upcoming : sorted).slice(0, 7);
+  return upcoming.slice(0, 7);
 }
 
 function ViewModal({ mission, onClose, onEdit }) {
-  const statutStyle = getStatutStyle(mission.statut);
+  const missionStatus = getMissionDisplayStatus(mission);
+  const statutStyle = getStatutStyle(missionStatus);
   const creatorName = resolveCreatorName(mission);
   const creatorEmail = resolveCreatorEmail(mission);
+  const potentialCandidates = getPotentialCandidatesCount(mission);
 
   return (
     <Overlay onClose={onClose}>
@@ -158,6 +210,7 @@ function ViewModal({ mission, onClose, onEdit }) {
               ["Date", mission.date],
               ["Destination", resolveMissionLocation(mission)],
               ["Responsable", mission.ResponsablesNoms || mission.responsable],
+              ["Candidats potentiels", potentialCandidates ?? "Non saisi"],
               ["Transport", mission.transport],
               ["Objectif", mission.objectif],
               ["Creee par", creatorName],
@@ -172,7 +225,7 @@ function ViewModal({ mission, onClose, onEdit }) {
 
           <div style={{ marginBottom: 18 }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Statut</div>
-            <span style={{ background: statutStyle.bg, color: statutStyle.color, borderRadius: 999, padding: "6px 14px", fontSize: 13, fontWeight: 700 }}>{mission.statut}</span>
+            <span style={{ background: statutStyle.bg, color: statutStyle.color, borderRadius: 999, padding: "6px 14px", fontSize: 13, fontWeight: 700 }}>{missionStatus}</span>
           </div>
 
           {mission.observations ? (
@@ -223,7 +276,6 @@ function EditModal({ mission, responsables, onClose, onSave, saving }) {
     Transport: normalizeText(mission.Transport || mission.transport),
     Objectif: normalizeText(mission.Objectif || mission.objectif),
     Observations: normalizeText(mission.Observations || mission.observations),
-    Statut: normalizeText(mission.Statut || mission.statut) || PLANIFIED_STATUS,
     responsablesIds: Array.isArray(mission.responsablesIds) ? mission.responsablesIds : [],
   });
   const [errors, setErrors] = useState({});
@@ -282,8 +334,6 @@ function EditModal({ mission, responsables, onClose, onSave, saving }) {
       objectif: form.Objectif,
       Observations: form.Observations,
       observations: form.Observations,
-      Statut: form.Statut,
-      statut: form.Statut,
       ResponsablesNoms: responsable,
       responsable,
     });
@@ -339,12 +389,6 @@ function EditModal({ mission, responsables, onClose, onSave, saving }) {
               <input value={form.Objectif} onChange={(event) => setValue("Objectif", event.target.value)} placeholder="Ex: 30 recrutements" style={inp(false)} />
             </Field>
           </div>
-
-          <Field label="Statut">
-            <select value={form.Statut} onChange={(event) => setValue("Statut", event.target.value)} style={inp(false)}>
-              {statuts.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </Field>
 
           <Field label="Observations">
             <textarea value={form.Observations || ""} onChange={(event) => setValue("Observations", event.target.value)} rows={3} placeholder="Notes ou commentaires..." style={{ ...inp(false), resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }} />
@@ -488,11 +532,12 @@ export default function MissionsPage() {
     const missionLocation = resolveMissionLocation(mission);
     const missionGovernorate = normalizeText(mission.Gouvernorat);
     const missionResponsables = mission.ResponsablesNoms || mission.responsable;
+    const missionStatus = getMissionDisplayStatus(mission);
 
     const matchVille = filtreVille === ALL_DESTINATIONS
       || missionGovernorate === filtreVille
       || missionLocation === filtreVille;
-    const matchStatut = filtreStatut === "Tous" || mission.statut === filtreStatut;
+    const matchStatut = filtreStatut === "Tous" || missionStatus === filtreStatut;
     const matchDate = !filtreDate || normalizeText(mission.DateMission).startsWith(filtreDate);
     const searchNeedle = search.toLowerCase();
     const searchableValues = [
@@ -526,7 +571,7 @@ export default function MissionsPage() {
     },
     {
       label: "Planifiees",
-      value: missions.filter((mission) => mission.statut === PLANIFIED_STATUS).length,
+      value: missions.filter((mission) => getMissionDisplayStatus(mission) === PLANIFIED_STATUS).length,
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
           <circle cx="12" cy="12" r="8" />
@@ -536,7 +581,7 @@ export default function MissionsPage() {
     },
     {
       label: "En cours",
-      value: missions.filter((mission) => mission.statut === IN_PROGRESS_STATUS).length,
+      value: missions.filter((mission) => getMissionDisplayStatus(mission) === IN_PROGRESS_STATUS).length,
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
           <path d="M4 12h16" />
@@ -546,7 +591,7 @@ export default function MissionsPage() {
     },
     {
       label: "Terminees",
-      value: missions.filter((mission) => mission.statut === COMPLETED_STATUS).length,
+      value: missions.filter((mission) => getMissionDisplayStatus(mission) === COMPLETED_STATUS).length,
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
           <polyline points="20 6 9 17 4 12" />
@@ -700,9 +745,11 @@ export default function MissionsPage() {
               <div className="missions-cards">
                 {filtered.map((mission) => {
                   const location = resolveMissionLocation(mission) || "Destination non renseignee";
-                  const statusStyle = getStatutStyle(mission.statut);
+                  const missionStatus = getMissionDisplayStatus(mission);
+                  const statusStyle = getStatutStyle(missionStatus);
                   const responsablesLabel = mission.ResponsablesNoms || mission.responsable || "Non renseigne";
                   const creatorName = resolveCreatorName(mission);
+                  const potentialCandidates = getPotentialCandidatesCount(mission);
 
                   return (
                     <article key={mission.Id || mission.id} className="mission-card">
@@ -712,7 +759,7 @@ export default function MissionsPage() {
                           <h3>{mission.id}</h3>
                         </div>
                         <span className="mission-status-badge" style={{ background: statusStyle.bg, color: statusStyle.color }}>
-                          {mission.statut || PLANIFIED_STATUS}
+                          {missionStatus}
                         </span>
                       </div>
 
@@ -751,6 +798,10 @@ export default function MissionsPage() {
                         <div className="mission-card__item">
                           <span>Objectif</span>
                           <strong>{mission.objectif || "Non renseigne"}</strong>
+                        </div>
+                        <div className="mission-card__item">
+                          <span>Candidats potentiels</span>
+                          <strong>{potentialCandidates ?? "Non saisi"}</strong>
                         </div>
                         <div className="mission-card__item">
                           <span>Creee par</span>
@@ -800,7 +851,8 @@ export default function MissionsPage() {
             ) : (
               <div className="planning-list">
                 {planningMissions.map((mission) => {
-                  const planningStatus = getStatutStyle(mission.statut);
+                  const missionStatus = getMissionDisplayStatus(mission);
+                  const planningStatus = getStatutStyle(missionStatus);
                   return (
                     <div key={`planning-${mission.Id || mission.id}`} className="planning-item">
                       <div className="planning-item__date">
@@ -811,7 +863,7 @@ export default function MissionsPage() {
                         <p>{mission.ResponsablesNoms || mission.responsable || "Responsable non renseigne"}</p>
                       </div>
                       <span className="planning-item__status" style={{ background: planningStatus.bg, color: planningStatus.color }}>
-                        {mission.statut}
+                        {missionStatus}
                       </span>
                     </div>
                   );

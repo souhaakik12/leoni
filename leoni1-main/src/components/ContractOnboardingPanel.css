@@ -74,6 +74,84 @@
   color: #475569;
 }
 
+.dossier-search-row {
+  margin-bottom: 14px;
+}
+
+.dossier-tabs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.dossier-tab {
+  border: 1px solid #dce3ec;
+  background: #f8fafc;
+  color: #334155;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.dossier-tab span {
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+
+.dossier-tab.active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.dossier-tab.active span {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+.dossier-search-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 420px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.dossier-search-field input {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #0f172a;
+  background: #ffffff;
+}
+
+.dossier-search-field input::placeholder {
+  color: #94a3b8;
+}
+
+.dossier-search-field input:focus {
+  outline: none;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.25);
+}
+
 .dossier-empty-state {
   border: 1px dashed #cbd5e1;
   border-radius: 12px;
@@ -100,6 +178,11 @@
 .dossier-card-compact.expanded {
   border-color: #bfdbfe;
   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+}
+
+.dossier-card-compact.validated {
+  border-color: #cbd5e1;
+  background: #fcfdff;
 }
 
 .dossier-summary-top {
@@ -175,6 +258,34 @@
 
 .summary-progress-label strong {
   color: #0f172a;
+}
+
+.validated-summary-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.validated-summary-grid div {
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.validated-summary-grid span {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.validated-summary-grid strong {
+  color: #0f172a;
+  font-size: 13px;
 }
 
 .dossier-progress-track {

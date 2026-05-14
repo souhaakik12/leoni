@@ -11,6 +11,7 @@ router.use((req, _res, next) => {
     next();
 });
 
+router.get("/mouvements", controller.listerMouvements);
 router.get("/", controller.listerCandidats);
 router.post("/", controller.createCandidat);
 router.put("/:id", (req, _res, next) => {
@@ -20,5 +21,6 @@ router.put("/:id", (req, _res, next) => {
 router.delete("/:id", controller.deleteCandidat);
 router.put("/:id/etape", controller.updateEtape);
 router.post("/:id/contrat/signer", requireRole(CONTRACT_ALLOWED_ROLES), controller.signerContratCandidat);
+router.post("/:id/dossier-contrat/valider", requireRole(CONTRACT_ALLOWED_ROLES), controller.validerDossierContrat);
 
 module.exports = router;

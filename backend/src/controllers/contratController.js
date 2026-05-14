@@ -10,6 +10,19 @@ function handleError(res, error, fallbackMessage) {
     });
 }
 
+function readActionUser(body, requestUser) {
+    return {
+        utilisateur_id: body?.utilisateur_id ?? requestUser?.id ?? null,
+        utilisateur_nom:
+            body?.utilisateur_nom ??
+            requestUser?.nom ??
+            requestUser?.name ??
+            requestUser?.nomComplet ??
+            "",
+        utilisateur_role: body?.utilisateur_role ?? requestUser?.role ?? "",
+    };
+}
+
 exports.getContrats = async (req, res) => {
     try {
         const result = await contratModel.getContratsFront({
@@ -28,9 +41,11 @@ exports.getContrats = async (req, res) => {
 
 exports.renouvelerContrat = async (req, res) => {
     try {
+        const actionUser = readActionUser(req.body, req.user);
         const result = await contratModel.renouvelerContrat(
             req.params.id,
-            req.body?.source_donnee
+            req.body?.source_donnee,
+            actionUser
         );
 
         return res.json({

@@ -13,6 +13,31 @@ async function getResidentsByFoyerId(foyerId) {
     return result.recordset;
 }
 
+async function findActiveResidentByMatricule(matricule, options = {}) {
+    const { includeQuitteeHistory = false } = options;
+    const pool = await getPool();
+    const request = pool.request()
+        .input("matricule", sql.VarChar, matricule);
+
+    const result = includeQuitteeHistory
+        ? await request.query(`
+            SELECT TOP 1 id
+            FROM Resident
+            WHERE matricule = @matricule
+        `)
+        : await request.query(`
+            SELECT TOP 1 id
+            FROM Resident
+            WHERE matricule = @matricule
+              AND (
+                etat IS NULL
+                OR LTRIM(RTRIM(etat)) NOT IN (N'Quittée', N'Quittee')
+              )
+        `);
+
+    return result.recordset[0] || null;
+}
+
 async function createResident(data) {
     const pool = await getPool();
     const result = await pool.request()
@@ -105,6 +130,7 @@ async function deleteResident(id) {
 }
 
 module.exports = {
+    findActiveResidentByMatricule,
     getResidentsByFoyerId,
     createResident,
     updateResident,

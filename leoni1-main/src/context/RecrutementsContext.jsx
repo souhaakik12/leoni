@@ -335,6 +335,23 @@ function mapApiCandidateToLocal(candidate) {
   });
 }
 
+function buildActionUserPayload(user) {
+  const utilisateurNom =
+    user?.nom ||
+    user?.name ||
+    user?.fullName ||
+    user?.username ||
+    user?.nomComplet ||
+    user?.email ||
+    "";
+
+  return {
+    utilisateur_id: user?.id ?? null,
+    utilisateur_nom: utilisateurNom,
+    utilisateur_role: user?.role || "",
+  };
+}
+
 export function RecrutementsProvider({ children }) {
   const { user } = useAuth();
   const [entries, setEntries] = useState(initialEntries);
@@ -661,7 +678,10 @@ export function RecrutementsProvider({ children }) {
         headers: buildRoleHeaders(user, {
           "Content-Type": "application/json",
         }),
-        body: JSON.stringify({ dossierComplet: dossierComplet === true }),
+        body: JSON.stringify({
+          dossierComplet: dossierComplet === true,
+          ...buildActionUserPayload(user),
+        }),
       });
 
       const payload = await response.json().catch(() => null);
@@ -716,6 +736,7 @@ export function RecrutementsProvider({ children }) {
       typeContrat: normalizedType,
       lieu_signature: safeLieuSignature,
       type_contrat: normalizedType,
+      ...buildActionUserPayload(user),
     };
 
     try {

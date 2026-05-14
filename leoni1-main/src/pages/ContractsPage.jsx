@@ -123,6 +123,7 @@ function mapContractRow(contract, index) {
     joursRestantsAffichage:
       contract.jours_restants_affichage ?? contract.joursRestantsAffichage ?? "",
     alerte: contract.alerte ?? "",
+    traitePar: contract.traite_par ?? contract.traitePar ?? "-",
     sourceDonnee: contract.source_donnee ?? contract.sourceDonnee ?? "",
   };
 }
@@ -302,6 +303,14 @@ function buildContractsUrl({ search }) {
   return query ? `${CONTRACTS_API_ENDPOINT}?${query}` : CONTRACTS_API_ENDPOINT;
 }
 
+function buildActionUserPayload(user) {
+  return {
+    utilisateur_id: user?.id ?? null,
+    utilisateur_nom: user?.nom || user?.name || user?.nomComplet || "",
+    utilisateur_role: user?.role || "",
+  };
+}
+
 function PaginationButton({ active, className = "", children, ...props }) {
   return (
     <button
@@ -342,7 +351,7 @@ function AlertBadge({ contract }) {
   return <span className={`contracts-badge is-alert-${alertState.tone}`}>{alertState.label}</span>;
 }
 
-function isRenewableContract(contract) {
+function canRenewContract(contract) {
   const normalizedAlert = normalizeText(contract?.alerte);
   return normalizedAlert === "expire" || normalizedAlert === "proche expiration";
 }
@@ -490,7 +499,7 @@ export default function ContractsPage() {
   const summaryLabel = tab === TAB_ALERTS ? "alertes affichees" : "contrats affiches";
 
   const handleRenewContract = async (contract) => {
-    if (!contract || !isRenewableContract(contract)) {
+    if (!contract || !canRenewContract(contract)) {
       window.alert("Ce contrat n’est pas éligible au renouvellement.");
       return;
     }
@@ -509,6 +518,7 @@ export default function ContractsPage() {
         }),
         body: JSON.stringify({
           source_donnee: contract.sourceDonnee,
+          ...buildActionUserPayload(user),
         }),
       });
 
@@ -631,19 +641,20 @@ export default function ContractsPage() {
                   <th>Statut contrat</th>
                   <th>Jours restants</th>
                   <th>Alerte</th>
+                  <th>Contrat trait&eacute; par</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="15" className="contracts-table__empty">
+                    <td colSpan="16" className="contracts-table__empty">
                       Chargement des contrats...
                     </td>
                   </tr>
                 ) : error ? (
                   <tr>
-                    <td colSpan="15" className="contracts-table__empty">
+                    <td colSpan="16" className="contracts-table__empty">
                       {error}
                     </td>
                   </tr>
@@ -672,9 +683,10 @@ export default function ContractsPage() {
                       <td>
                         <AlertBadge contract={contract} />
                       </td>
+                      <td className="contracts-table__cell--muted">{contract.traitePar || "-"}</td>
                       <td>
                         <ActionMenu
-                          disabled={!isRenewableContract(contract)}
+                          disabled={!canRenewContract(contract)}
                           loading={renewingContractId === contract.id}
                           onRenew={() => void handleRenewContract(contract)}
                         />
@@ -683,7 +695,7 @@ export default function ContractsPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="15" className="contracts-table__empty">
+                    <td colSpan="16" className="contracts-table__empty">
                       Aucun contrat trouv&eacute;.
                     </td>
                   </tr>
@@ -738,19 +750,20 @@ export default function ContractsPage() {
                       <th>Date fin contrat</th>
                       <th>Jours restants</th>
                       <th>Alerte</th>
+                      <th>Contrat trait&eacute; par</th>
                       <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan="11" className="contracts-table__empty">
+                        <td colSpan="12" className="contracts-table__empty">
                           Chargement des alertes...
                         </td>
                       </tr>
                     ) : error ? (
                       <tr>
-                        <td colSpan="11" className="contracts-table__empty">
+                        <td colSpan="12" className="contracts-table__empty">
                           {error}
                         </td>
                       </tr>
@@ -773,10 +786,11 @@ export default function ContractsPage() {
                           <td>
                             <AlertBadge contract={contract} />
                           </td>
+                          <td className="contracts-table__cell--muted">{contract.traitePar || "-"}</td>
                           <td>
                             <ActionMenu
                               alertMode
-                              disabled={!isRenewableContract(contract)}
+                              disabled={!canRenewContract(contract)}
                               loading={renewingContractId === contract.id}
                               onRenew={() => void handleRenewContract(contract)}
                             />
@@ -785,7 +799,7 @@ export default function ContractsPage() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="11" className="contracts-table__empty">
+                        <td colSpan="12" className="contracts-table__empty">
                           Aucune alerte de renouvellement pour le moment.
                         </td>
                       </tr>

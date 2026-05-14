@@ -55,6 +55,13 @@ function hasCompletedFirstMonth(entryDate) {
   return diffMs >= ONE_MONTH_DAYS * 24 * 60 * 60 * 1000;
 }
 
+function getMonthStamp(dateValue) {
+  if (!dateValue) return null;
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.getFullYear() * 12 + date.getMonth();
+}
+
 function computeResidentFinance(entryDate, exitDate, type, status) {
   let normalizedType = normalizeResidentType(type);
   const exitDay = getDayNumber(exitDate);
@@ -69,6 +76,14 @@ function computeResidentFinance(entryDate, exitDate, type, status) {
   }
 
   if (isQuitteeStatus(status) && exitDay !== null) {
+    const exitMonthStamp = getMonthStamp(exitDate);
+    const currentMonthStamp = getMonthStamp(new Date());
+
+    // La cotisation de sortie est due uniquement pendant le mois de sortie.
+    if (exitMonthStamp === null || currentMonthStamp === null || exitMonthStamp !== currentMonthStamp) {
+      return { type: normalizedType, cotisation: 0, reste: 0 };
+    }
+
     const cotisation = exitDay <= 15 ? 30 : 60;
     return { type: normalizedType, cotisation, reste: 0 };
   }
@@ -206,25 +221,25 @@ function validateResidentForm(form) {
 
   if (!matricule) {
     next.matricule = "Le matricule est obligatoire";
+  } else if (!DIGITS_ONLY_REGEX.test(matricule)) {
+    next.matricule = "Le matricule doit contenir uniquement des chiffres";
   }
 
   if (!cin || !CIN_REGEX.test(cin)) {
     next.cin = "Le CIN doit contenir exactement 8 chiffres";
   }
 
-  if (age) {
-    const ageNumber = Number(age);
-    if (!Number.isFinite(ageNumber) || ageNumber <= 0) {
-      next.age = "L'âge doit être un nombre positif";
-    }
+  const ageNumber = Number(age);
+  if (!/^\d{2}$/.test(age) || !Number.isInteger(ageNumber) || ageNumber < 18 || ageNumber > 99) {
+    next.age = "L\u2019\u00e2ge doit \u00eatre compris entre 18 et 99 ans";
   }
 
-  if (phone && !DIGITS_ONLY_REGEX.test(phone)) {
-    next.phone = "Le numéro de téléphone doit contenir uniquement des chiffres";
+  if (phone && !/^[0-9]{1,8}$/.test(phone)) {
+    next.phone = "Le téléphone doit contenir uniquement 8 chiffres maximum";
   }
 
-  if (parentPhone && !DIGITS_ONLY_REGEX.test(parentPhone)) {
-    next.parentPhone = "Le numéro du parent doit contenir uniquement des chiffres";
+  if (parentPhone && !/^[0-9]{1,8}$/.test(parentPhone)) {
+    next.parentPhone = "Le téléphone du parent doit contenir uniquement 8 chiffres maximum";
   }
 
   if (email && !EMAIL_REGEX.test(email)) {
@@ -308,13 +323,24 @@ function mapDormFromApi(d) {
 
 function ResidentFormModal({ initialData, onClose, onSave }) {
   const isEdit = !!initialData?.id;
+  const isAddMode = !isEdit;
   const [form, setForm] = useState(
     normalizeResidentFormData(initialData)
   );
   const [errors, setErrors] = useState({});
   useEffect(() => {
-    setForm(normalizeResidentFormData(initialData));
-  }, [initialData]);
+    const normalized = normalizeResidentFormData(initialData);
+    if (isAddMode) {
+      setForm({
+        ...normalized,
+        status: STATUS_AU_FOYER,
+        type: "nouvelle",
+        exitDate: "",
+      });
+      return;
+    }
+    setForm(normalized);
+  }, [initialData, isAddMode]);
   const autoCotisation = useMemo(
     () => computeCotisation(form.entryDate, form.exitDate, form.type, form.status),
     [form.entryDate, form.exitDate, form.status, form.type]
@@ -325,14 +351,25 @@ function ResidentFormModal({ initialData, onClose, onSave }) {
       if (key === "room") {
         return { ...prev, room: value, chambre: value };
       }
+      if (key === "age") {
+        const sanitizedAge = String(value ?? "").replace(/\D/g, "").slice(0, 2);
+        return { ...prev, age: sanitizedAge };
+      }
+      if (key === "status" && isAddMode) {
+        return { ...prev, status: STATUS_AU_FOYER, type: "nouvelle", exitDate: "" };
+      }
       if (key === "status" && !isQuitteeStatus(value)) {
         return { ...prev, status: value, exitDate: "" };
+      }
+      if (key === "exitDate" && (isAddMode || !isQuitteeStatus(prev.status))) {
+        return { ...prev, exitDate: "" };
       }
       return { ...prev, [key]: value };
     });
     setErrors((prev) => {
       const next = { ...prev };
       if (next[key]) next[key] = "";
+      if (next.submit) next.submit = "";
       if (key === "status" && !isQuitteeStatus(value) && next.exitDate) {
         next.exitDate = "";
       }
@@ -347,7 +384,19 @@ function ResidentFormModal({ initialData, onClose, onSave }) {
       setErrors(v);
       return;
     }
-    await onSave({ ...form, cotisation: autoCotisation });
+    const result = await onSave({
+      ...form,
+      status: isAddMode ? STATUS_AU_FOYER : form.status,
+      type: isAddMode ? "nouvelle" : form.type,
+      exitDate: isAddMode ? "" : form.exitDate,
+      cotisation: autoCotisation,
+    });
+    if (result && result.ok === false) {
+      setErrors((prev) => ({
+        ...prev,
+        submit: result.message || "Erreur lors de l'enregistrement.",
+      }));
+    }
   };
 
   return (
@@ -392,7 +441,7 @@ function ResidentFormModal({ initialData, onClose, onSave }) {
           {[
             { key: "fullName", label: "Nom complet", type: "text" },
             { key: "matricule", label: "Matricule", type: "text" },
-            { key: "age", label: "Age", type: "number" },
+            { key: "age", label: "Age", type: "text" },
             { key: "phone", label: "Telephone", type: "text" },
             { key: "parentPhone", label: "Tel. parent", type: "text" },
             { key: "room", label: "Chambre", type: "text" },
@@ -409,7 +458,16 @@ function ResidentFormModal({ initialData, onClose, onSave }) {
                 type={f.type}
                 value={form[f.key]}
                 onChange={(e) => setField(f.key, e.target.value)}
-                style={{ ...inputStyle, borderColor: errors[f.key] ? "#dc2626" : "#d1d5db" }}
+                disabled={f.key === "exitDate" && (isAddMode || !isQuitteeStatus(form.status))}
+                inputMode={f.key === "age" ? "numeric" : undefined}
+                maxLength={f.key === "age" ? 2 : undefined}
+                style={{
+                  ...inputStyle,
+                  borderColor: errors[f.key] ? "#dc2626" : "#d1d5db",
+                  background: f.key === "exitDate" && (isAddMode || !isQuitteeStatus(form.status)) ? "#f3f4f6" : inputStyle.background,
+                  color: f.key === "exitDate" && (isAddMode || !isQuitteeStatus(form.status)) ? "#9ca3af" : "#111827",
+                  cursor: f.key === "exitDate" && (isAddMode || !isQuitteeStatus(form.status)) ? "not-allowed" : "text",
+                }}
               />
               {errors[f.key] && <p style={{ fontSize: 10, color: "#dc2626", marginTop: 2 }}>{errors[f.key]}</p>}
             </div>
@@ -419,8 +477,18 @@ function ResidentFormModal({ initialData, onClose, onSave }) {
             <label style={{ fontSize: 12, fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>
               Etat
             </label>
-            <select value={form.status} onChange={(e) => setField("status", e.target.value)} style={inputStyle}>
-              {statusOptions.map((s) => (
+            <select
+              value={isAddMode ? STATUS_AU_FOYER : form.status}
+              onChange={(e) => setField("status", e.target.value)}
+              disabled={isAddMode}
+              style={{
+                ...inputStyle,
+                background: isAddMode ? "#f3f4f6" : inputStyle.background,
+                color: isAddMode ? "#6b7280" : "#111827",
+                cursor: isAddMode ? "not-allowed" : "pointer",
+              }}
+            >
+              {(isAddMode ? [STATUS_AU_FOYER] : statusOptions).map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
@@ -453,6 +521,11 @@ function ResidentFormModal({ initialData, onClose, onSave }) {
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, padding: "16px 22px", borderTop: "1px solid #f3f4f6" }}>
+            {errors.submit && (
+              <p style={{ width: "100%", margin: 0, marginRight: "auto", fontSize: 12, color: "#dc2626", fontWeight: 600 }}>
+                {errors.submit}
+              </p>
+            )}
             <button type="button" onClick={onClose} style={{ padding: "9px 18px", borderRadius: 8, border: "1px solid #e5e7eb", background: "#f9fafb", color: "#374151", fontSize: 13, fontWeight: 600 }}>
             Annuler
             </button>
@@ -646,6 +719,7 @@ export default function DormResidentsPage() {
     const method = editingResident ? "PUT" : "POST";
 
     try {
+      console.log("CHECK MATRICULE:", payload.matricule);
       const saveRes = await fetch(url, {
         method,
         headers: {
@@ -655,13 +729,24 @@ export default function DormResidentsPage() {
       });
 
       if (!saveRes.ok) {
-        const errorBody = await saveRes.text();
-        console.error("Save API error:", errorBody);
-        throw new Error(`Save failed with status ${saveRes.status}`);
+        let errorMessage = "Erreur lors de l'enregistrement.";
+        const contentType = saveRes.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const errorData = await saveRes.json();
+          if (errorData?.message) {
+            errorMessage = errorData.message;
+          }
+        } else {
+          const errorText = await saveRes.text();
+          if (errorText) {
+            errorMessage = errorText;
+          }
+        }
+        return { ok: false, message: errorMessage };
       }
       const residentsRes = await fetch(`http://localhost:3000/api/resident/${normalizedDormId}`);
       if (!residentsRes.ok) {
-        throw new Error(`Reload failed with status ${residentsRes.status}`);
+        return { ok: false, message: "Enregistrement réussi, mais le rechargement a échoué." };
       }
       const data = await residentsRes.json();
       const rows = Array.isArray(data) ? data : [];
@@ -669,8 +754,10 @@ export default function DormResidentsPage() {
 
       setShowForm(false);
       setEditingResident(null);
+      return { ok: true };
     } catch (err) {
       console.error(err);
+      return { ok: false, message: "Erreur réseau lors de l'enregistrement." };
     }
   };
   if (isFoyerLoading) {
