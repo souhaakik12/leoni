@@ -17,6 +17,12 @@ const allNavItems = [
     icon: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>,
   },
   {
+    path: "/admin/dashboards",
+    label: "Tableaux de bord",
+    roles: [ROLE_ADMIN],
+    icon: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 19V5"/><path d="M10 19V11"/><path d="M16 19V8"/><path d="M22 19V3"/></svg>,
+  },
+  {
     path: "/missions",
     label: "Missions",
     roles: [ROLE_ADMIN, ROLE_RECRUTEUR],

@@ -443,6 +443,7 @@ export default function CandidatsPage() {
   const [niveauScolaire, setNiveauScolaire] = useState("");
   const [poste, setPoste] = useState(postes[0] || "");
   const [adresse, setAdresse] = useState("");
+  const [gouvernoratOptions, setGouvernoratOptions] = useState([]);
   const [errors, setErrors] = useState({});
   const [submissionMessage, setSubmissionMessage] = useState("");
 
@@ -499,6 +500,13 @@ export default function CandidatsPage() {
 
   useEffect(() => {
     fetchCandidats();
+  }, []);
+
+  useEffect(() => {
+    fetch("http://localhost:3000/api/references/candidat-options")
+      .then((res) => res.json())
+      .then((data) => setGouvernoratOptions(Array.isArray(data?.gouvernorats) ? data.gouvernorats : []))
+      .catch(() => setGouvernoratOptions([]));
   }, []);
 
   useEffect(() => {
@@ -1082,18 +1090,23 @@ if (!response.ok) {
 
           <div className={`cand-create-field cand-create-field-wide ${errors.adresse ? "is-invalid" : ""}`}>
             <label htmlFor="cand-adresse">Adresse</label>
-            <input
+            <select
               id="cand-adresse"
               value={adresse}
               onChange={(e) => {
                 setAdresse(e.target.value);
                 clearFieldError("adresse");
               }}
-              placeholder="Adresse complete"
-              autoComplete="street-address"
               required
               aria-invalid={Boolean(errors.adresse)}
-            />
+            >
+              <option value="">Sélectionner un gouvernorat</option>
+              {gouvernoratOptions.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
             {errors.adresse && <span className="cand-create-error">{errors.adresse}</span>}
           </div>
 

@@ -21,6 +21,7 @@ import EmployeesPage from "./pages/EmployeesPage.jsx";
 import CreateMissionPage from "./pages/CreateMissionPage.jsx";
 import CandidatsPage from "./pages/CandidatsPage.jsx";
 import CandidatDossierPage from "./pages/CandidatDossierPage.jsx";
+import AdminPowerBIPage from "./pages/AdminPowerBIPage.jsx";
 import {
   CONTRACT_ACCESS_ROLES,
   ROLE_ADMIN,
@@ -101,6 +102,9 @@ function AppLayout() {
             } />
             <Route path="/employees" element={
               <ProtectedRoute allowedRoles={[ROLE_ADMIN]}><EmployeesPage /></ProtectedRoute>
+            } />
+            <Route path="/admin/dashboards" element={
+              <ProtectedRoute allowedRoles={[ROLE_ADMIN]}><AdminPowerBIPage /></ProtectedRoute>
             } />
             <Route path="*" element={<Navigate to={getHomeRouteForRole(user.role)} replace />} />
           </Routes>

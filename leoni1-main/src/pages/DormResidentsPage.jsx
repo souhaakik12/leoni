@@ -550,6 +550,7 @@ export default function DormResidentsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingResident, setEditingResident] = useState(null);
   const [residentFilter, setResidentFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     let isMounted = true;
@@ -611,6 +612,7 @@ export default function DormResidentsPage() {
     loadResidents();
     setShowForm(false);
     setEditingResident(null);
+    setSearchTerm("");
 
     return () => {
       isMounted = false;
@@ -633,6 +635,28 @@ export default function DormResidentsPage() {
       return true;
     });
   }, [safeResidents, residentFilter]);
+  const searchedResidents = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    if (!normalizedSearch) return filteredResidents;
+
+    return filteredResidents.filter((r) => {
+      const fields = [
+        r.fullName,
+        r.matricule,
+        r.cin,
+        r.phone,
+        r.chambre ?? r.room,
+        r.type,
+        computeResidentType(r.entryDate, r.type, r.status),
+        r.status,
+        formatStatusLabel(r.status),
+      ];
+
+      return fields.some((fieldValue) =>
+        String(fieldValue ?? "").toLowerCase().includes(normalizedSearch)
+      );
+    });
+  }, [filteredResidents, searchTerm]);
 
   const stats = useMemo(() => {
     const total = foyer?.capacite || 0;
@@ -818,7 +842,7 @@ export default function DormResidentsPage() {
 
       <div className="dorm-panel">
         <div className="dorm-panel-head">
-          <h3>Residentes Actives ({filteredResidents.length})</h3>
+          <h3>Residentes Actives ({stats.occupied})</h3>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
             {[
               { key: "all", label: "All" },
@@ -845,6 +869,25 @@ export default function DormResidentsPage() {
               </button>
             ))}
           </div>
+          <div style={{ marginTop: 12 }}>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Rechercher par nom, matricule, CIN, telephone..."
+              style={{
+                width: "100%",
+                maxWidth: 420,
+                padding: "10px 12px",
+                border: "1px solid #d1d5db",
+                borderRadius: 10,
+                fontSize: 13,
+                color: "#111827",
+                background: "#fff",
+                outlineColor: "#2563eb",
+              }}
+            />
+          </div>
         </div>
 
         <div className="dorm-table-wrap">
@@ -857,14 +900,14 @@ export default function DormResidentsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredResidents.length === 0 ? (
+              {searchedResidents.length === 0 ? (
                 <tr>
                   <td colSpan={13} className="dorm-empty-cell">
-                    Aucune residente pour le moment.
+                    Aucune résidente trouvée.
                   </td>
                 </tr>
               ) : (
-                filteredResidents.map((r, i) => {
+                searchedResidents.map((r, i) => {
                   const st = isQuitteeStatus(r.status)
                     ? { bg: "#fee2e2", color: "#dc2626" }
                     : statusStyle[r.status] || statusStyle["Au foyer"];
@@ -876,7 +919,7 @@ export default function DormResidentsPage() {
                   );
                   const typeBadge = getTypeBadge(finance.type, r.status);
                   return (
-                    <tr key={r.id} className="dorm-row" style={{ borderBottom: i < filteredResidents.length - 1 ? "1px solid #e5e7eb" : "none" }}>
+                    <tr key={r.id} className="dorm-row" style={{ borderBottom: i < searchedResidents.length - 1 ? "1px solid #e5e7eb" : "none" }}>
                       <td className="dorm-name-cell">{safeText(r.fullName)}</td>
                       <td>{safeText(r.matricule)}</td>
                       <td>{formatAge(r.age)}</td>

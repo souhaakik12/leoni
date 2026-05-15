@@ -374,7 +374,8 @@ export default function ContractOnboardingPanel() {
       {toast.message && <div className={`dossier-toast ${toast.type}`}>{toast.message}</div>}
 
       <header className="dossier-board-head">
-        <div>
+        <div className="dossier-head-content">
+          <span className="dossier-category-badge">SERVICE CONTRATS</span>
           <h3>Dossier Contrat - Service Contrats</h3>
           <p>Vue compacte: utilisez "Afficher les documents" pour ouvrir le detail d'un candidat.</p>
         </div>
@@ -384,35 +385,37 @@ export default function ContractOnboardingPanel() {
         </div>
       </header>
 
-      <div className="dossier-search-row">
-        <label className="dossier-search-field">
-          <span>Recherche</span>
-          <input
-            type="search"
-            value={searchTerm}
-            onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Rechercher par nom, CIN ou type de contrat"
-          />
-        </label>
-      </div>
+      <div className="dossier-toolbar">
+        <div className="dossier-search-row">
+          <label className="dossier-search-field">
+            <span>Recherche</span>
+            <input
+              type="search"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Rechercher par nom, CIN ou type de contrat"
+            />
+          </label>
+        </div>
 
-      <div className="dossier-tabs">
-        <button
-          className={`dossier-tab ${activeTab === TAB_EN_COURS ? "active" : ""}`}
-          onClick={() => setActiveTab(TAB_EN_COURS)}
-          type="button"
-        >
-          Dossiers en cours
-          <span>{ongoingQueue.length}</span>
-        </button>
-        <button
-          className={`dossier-tab ${activeTab === TAB_VALIDES ? "active" : ""}`}
-          onClick={() => setActiveTab(TAB_VALIDES)}
-          type="button"
-        >
-          Dossiers valides
-          <span>{validatedQueue.length}</span>
-        </button>
+        <div className="dossier-tabs">
+          <button
+            className={`dossier-tab ${activeTab === TAB_EN_COURS ? "active" : ""}`}
+            onClick={() => setActiveTab(TAB_EN_COURS)}
+            type="button"
+          >
+            Dossiers en cours
+            <span>{ongoingQueue.length}</span>
+          </button>
+          <button
+            className={`dossier-tab ${activeTab === TAB_VALIDES ? "active" : ""}`}
+            onClick={() => setActiveTab(TAB_VALIDES)}
+            type="button"
+          >
+            Dossiers valides
+            <span>{validatedQueue.length}</span>
+          </button>
+        </div>
       </div>
 
       {!hasTrackedCandidates ? (
@@ -444,59 +447,61 @@ export default function ContractOnboardingPanel() {
                 key={candidate.id}
                 className={`dossier-card-compact ${isExpanded ? "expanded" : ""} ${showValidatedView ? "validated" : ""}`}
               >
-                <div className="dossier-summary-top">
-                  <div>
-                    <h4>{candidate.nomComplet || "Candidat sans nom"}</h4>
-                    <p>CIN: {candidate.cin || "-"} | Type contrat: {typeContrat}</p>
+                <div className={`dossier-summary-shell ${showValidatedView ? "validated" : ""}`}>
+                  <div className="dossier-summary-top">
+                    <div className="dossier-identity">
+                      <h4>{candidate.nomComplet || "Candidat sans nom"}</h4>
+                      <p>CIN: {candidate.cin || "-"} | Type contrat: {typeContrat}</p>
+                    </div>
+                    <div className="dossier-head-badges">
+                      <span className="badge type">{typeContrat}</span>
+                      <span className={`badge status ${workflow.contratSigne ? "ok" : "warn"}`}>Contrat {contratLabel}</span>
+                      <span className={`badge status ${dossierBadgeState}`}>Dossier {dossierLabel}</span>
+                      {workflow.finalise && <span className="badge status ok">Nouveau recrute</span>}
+                    </div>
                   </div>
-                  <div className="dossier-head-badges">
-                    <span className="badge type">{typeContrat}</span>
-                    <span className={`badge status ${workflow.contratSigne ? "ok" : "warn"}`}>Contrat {contratLabel}</span>
-                    <span className={`badge status ${dossierBadgeState}`}>Dossier {dossierLabel}</span>
-                    {workflow.finalise && <span className="badge status ok">Nouveau recrute</span>}
-                  </div>
-                </div>
 
-                {showValidatedView ? (
-                  <div className="validated-summary-grid">
-                    <div>
-                      <span>Statut contrat</span>
-                      <strong>{candidate?.statutContrat || candidate?.statut_contrat || contratLabel}</strong>
+                  {showValidatedView ? (
+                    <div className="validated-summary-grid">
+                      <div>
+                        <span>Statut contrat</span>
+                        <strong>{candidate?.statutContrat || candidate?.statut_contrat || contratLabel}</strong>
+                      </div>
+                      <div>
+                        <span>Statut dossier</span>
+                        <strong>{candidate?.statutDossier || candidate?.statut_dossier || "VALIDE"}</strong>
+                      </div>
+                      <div>
+                        <span>Date signature</span>
+                        <strong>{formatDateTime(candidate?.dateSignature || candidate?.date_signature)}</strong>
+                      </div>
                     </div>
-                    <div>
-                      <span>Statut dossier</span>
-                      <strong>{candidate?.statutDossier || candidate?.statut_dossier || "VALIDE"}</strong>
+                  ) : (
+                    <div className="summary-progress-row">
+                      <div className="summary-progress-label">
+                        <span>Progression documents</span>
+                        <strong>{progress.doneCount}/{progress.total}</strong>
+                      </div>
+                      <div className="dossier-progress-track compact">
+                        <div
+                          className={`dossier-progress-fill ${progress.isComplete ? "ok" : "warn"}`}
+                          style={{ width: `${progress.percent}%` }}
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <span>Date signature</span>
-                      <strong>{formatDateTime(candidate?.dateSignature || candidate?.date_signature)}</strong>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="summary-progress-row">
-                    <div className="summary-progress-label">
-                      <span>Progression documents</span>
-                      <strong>{progress.doneCount}/{progress.total}</strong>
-                    </div>
-                    <div className="dossier-progress-track compact">
-                      <div
-                        className={`dossier-progress-fill ${progress.isComplete ? "ok" : "warn"}`}
-                        style={{ width: `${progress.percent}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
+                  )}
 
-                {!showValidatedView && (
-                  <div className="summary-main-actions">
+                  <div className={`summary-main-actions ${showValidatedView ? "validated-actions" : ""}`}>
                     <button className="btn-secondary" onClick={() => openCandidateDossier(candidate.id)} type="button">
                       Consulter dossier
                     </button>
-                    <button className="btn-toggle-docs" onClick={() => toggleExpanded(candidate.id)} type="button">
-                      {isExpanded ? "Masquer les documents" : "Afficher les documents"}
-                    </button>
+                    {!showValidatedView && (
+                      <button className="btn-toggle-docs" onClick={() => toggleExpanded(candidate.id)} type="button">
+                        {isExpanded ? "Masquer les documents" : "Afficher les documents"}
+                      </button>
+                    )}
                   </div>
-                )}
+                </div>
 
                 {isExpanded && !showValidatedView && (
                   <div className="dossier-expand-panel">
@@ -532,6 +537,7 @@ export default function ContractOnboardingPanel() {
                     </div>
 
                     <div className="dossier-doc-table-wrap">
+                      <div className="dossier-doc-table-title">Documents du dossier</div>
                       <table className="dossier-doc-table">
                         <thead>
                           <tr>

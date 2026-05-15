@@ -4,6 +4,10 @@ import { ROLE_RESPONSABLE_CONTRAT, normalizeRole } from "../utils/roles.js";
 
 const pageTitles = {
   "/": { title: "Dashboard", sub: "Vue d'ensemble de votre activite" },
+  "/admin/dashboards": {
+    title: "Tableaux de bord",
+    sub: "Suivi des candidats, contrats et missions",
+  },
   "/dorms": { title: "Gestion des Foyers", sub: "Gerez les foyers et hebergements" },
   "/missions": { title: "Gestion des Missions", sub: "Gerez les missions de recrutement" },
   "/candidats/candidat": {

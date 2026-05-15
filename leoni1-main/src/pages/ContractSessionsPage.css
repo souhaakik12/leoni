@@ -16,11 +16,14 @@
   --neutral-soft: #f4f6fb;
 
   min-height: 100%;
+  width: 100%;
+  max-width: none;
   background: var(--bg-page);
   padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 18px;
+  box-sizing: border-box;
 }
 
 .seance-toast {
@@ -61,6 +64,7 @@
 .seance-waiting-card,
 .session-empty-card,
 .session-card {
+  width: 100%;
   background: var(--card-bg);
   border: 1px solid var(--line);
   border-radius: 20px;
@@ -314,27 +318,35 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
+  width: 100%;
 }
 
 .session-group {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: 100%;
 }
 
 .seance-grid,
 .session-card-list {
+  width: 100%;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 20px;
+  align-items: stretch;
 }
 
 .seance-card,
 .session-card {
+  width: 100%;
+  max-width: none;
+  min-height: 230px;
   padding: 16px;
   border-radius: 20px;
   border: 1px solid #e6ebf4;
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+  box-sizing: border-box;
 }
 
 .seance-card.is-neutral {
@@ -613,11 +625,29 @@
   }
 
   .seance-grid,
+  .session-card-list {
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+
+  .waiting-cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+}
+
+@media (max-width: 600px) {
+  .seance-grid,
   .session-card-list,
   .waiting-cards-grid {
     grid-template-columns: 1fr;
   }
 
+  .seance-card {
+    min-height: auto;
+  }
+}
+
+@media (max-width: 900px) {
   .seance-assign-row {
     grid-template-columns: 1fr;
   }

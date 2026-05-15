@@ -1,0 +1,218 @@
+.admin-powerbi-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 100%;
+}
+
+.admin-powerbi-hero {
+  background: linear-gradient(135deg, #0f2744 0%, #13385f 100%);
+  color: #ffffff;
+  border-radius: 18px;
+  padding: 26px 28px;
+  box-shadow: 0 18px 40px rgba(15, 39, 68, 0.14);
+}
+
+.admin-powerbi-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+.admin-powerbi-hero h2 {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-bottom: 6px;
+}
+
+.admin-powerbi-hero p {
+  color: rgba(231, 240, 251, 0.92);
+  font-size: 14px;
+}
+
+.admin-powerbi-content {
+  background: #eef2f7;
+  border: 1px solid #d8e1eb;
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.admin-powerbi-tabs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.admin-powerbi-tab {
+  border: 1px solid #cbd6e2;
+  background: #f7f9fc;
+  color: #36506d;
+  border-radius: 10px;
+  padding: 11px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  transition: all 0.18s ease;
+}
+
+.admin-powerbi-tab:hover {
+  background: #eaf0f8;
+  border-color: #b7c8d9;
+}
+
+.admin-powerbi-tab.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.18);
+}
+
+.admin-powerbi-card {
+  background: #ffffff;
+  border-radius: 18px;
+  border: 1px solid #dce5ef;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.admin-powerbi-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px;
+  border-bottom: 1px solid #e6edf5;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.admin-powerbi-card-label {
+  display: inline-block;
+  margin-bottom: 8px;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-powerbi-card-header h3 {
+  font-size: 20px;
+  font-weight: 800;
+  color: #13385f;
+}
+
+.admin-powerbi-card-header p {
+  max-width: 360px;
+  color: #6c7f92;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.admin-powerbi-frame {
+  width: 100%;
+  height: 78vh;
+  min-height: 620px;
+  border: 0;
+  display: block;
+  background: #f8fafc;
+}
+
+.admin-powerbi-placeholder {
+  min-height: 78vh;
+  padding: 36px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: linear-gradient(180deg, #f8fbff 0%, #f3f7fb 100%);
+  color: #4b6179;
+}
+
+.admin-powerbi-placeholder-icon {
+  width: 62px;
+  height: 62px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e9f1ff;
+  color: #2563eb;
+  margin-bottom: 18px;
+}
+
+.admin-powerbi-placeholder h4 {
+  color: #13385f;
+  font-size: 20px;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.admin-powerbi-placeholder p {
+  max-width: 620px;
+  line-height: 1.7;
+  font-size: 14px;
+}
+
+.admin-powerbi-placeholder code {
+  background: #ffffff;
+  border: 1px solid #d8e1eb;
+  border-radius: 7px;
+  padding: 2px 7px;
+  color: #0f2744;
+}
+
+@media (max-width: 900px) {
+  .admin-powerbi-hero {
+    padding: 22px 20px;
+  }
+
+  .admin-powerbi-hero h2 {
+    font-size: 25px;
+  }
+
+  .admin-powerbi-card-header {
+    flex-direction: column;
+  }
+
+  .admin-powerbi-frame,
+  .admin-powerbi-placeholder {
+    min-height: 520px;
+    height: 72vh;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-powerbi-content {
+    padding: 14px;
+  }
+
+  .admin-powerbi-tabs {
+    flex-direction: column;
+  }
+
+  .admin-powerbi-tab {
+    width: 100%;
+  }
+
+  .admin-powerbi-card-header {
+    padding: 18px;
+  }
+
+  .admin-powerbi-frame,
+  .admin-powerbi-placeholder {
+    min-height: 460px;
+    height: 68vh;
+  }
+}

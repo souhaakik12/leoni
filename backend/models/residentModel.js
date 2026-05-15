@@ -31,11 +31,39 @@ async function findActiveResidentByMatricule(matricule, options = {}) {
             WHERE matricule = @matricule
               AND (
                 etat IS NULL
-                OR LTRIM(RTRIM(etat)) NOT IN (N'Quittée', N'Quittee')
+                OR UPPER(LTRIM(RTRIM(etat))) COLLATE Latin1_General_CI_AI <> N'QUITTEE'
               )
         `);
 
     return result.recordset[0] || null;
+}
+
+async function getFoyerCapacityAndOccupied(foyerId) {
+    const pool = await getPool();
+    const result = await pool.request()
+        .input("foyer_id", sql.Int, foyerId)
+        .query(`
+            SELECT
+                f.capacite,
+                COUNT(r.id) AS occupied
+            FROM dbo.Foyer f
+            LEFT JOIN dbo.Resident r
+                ON r.foyer_id = f.id
+               AND (
+                    r.etat IS NULL
+                    OR UPPER(LTRIM(RTRIM(r.etat))) COLLATE Latin1_General_CI_AI <> N'QUITTEE'
+               )
+            WHERE f.id = @foyer_id
+            GROUP BY f.capacite
+        `);
+
+    const row = result.recordset[0];
+    if (!row) return null;
+
+    return {
+        capacite: Number(row.capacite ?? 0),
+        occupied: Number(row.occupied ?? 0),
+    };
 }
 
 async function createResident(data) {
@@ -131,8 +159,10 @@ async function deleteResident(id) {
 
 module.exports = {
     findActiveResidentByMatricule,
+    getFoyerCapacityAndOccupied,
     getResidentsByFoyerId,
     createResident,
     updateResident,
     deleteResident,
 };
+

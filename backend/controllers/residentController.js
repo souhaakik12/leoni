@@ -191,6 +191,19 @@ async function createResident(req, res) {
             return res.status(400).json({ message: validationError });
         }
 
+        if (!isQuitteeStatus(normalized.data.etat)) {
+            const foyerStats = await residentModel.getFoyerCapacityAndOccupied(normalized.data.foyer_id);
+            if (!foyerStats) {
+                return res.status(404).json({ message: "Foyer introuvable." });
+            }
+
+            if (foyerStats.occupied >= foyerStats.capacite) {
+                return res.status(400).json({
+                    message: "La capacité maximale du foyer est atteinte.",
+                });
+            }
+        }
+
         if (normalized.data.type === "nouvelle") {
             const existingActiveResident = await residentModel.findActiveResidentByMatricule(
                 normalized.data.matricule,

@@ -50,3 +50,23 @@ exports.getEntretienOptions = async (_req, res) => {
         return res.status(500).json({ message: "Chargement des options entretien impossible." });
     }
 };
+
+exports.getCandidatOptions = async (_req, res) => {
+    try {
+        const pool = await sql.connect(config);
+
+        const gouvernoratsResult = await pool.request().query(`
+            SELECT nom
+            FROM dbo.ref_gouvernorats
+            WHERE actif = 1
+            ORDER BY nom;
+        `);
+
+        return res.json({
+            gouvernorats: mapNames(gouvernoratsResult),
+        });
+    } catch (err) {
+        console.error("Erreur getCandidatOptions:", err);
+        return res.status(500).json({ message: "Chargement des options candidat impossible." });
+    }
+};
