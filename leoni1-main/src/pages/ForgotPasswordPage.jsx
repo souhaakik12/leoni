@@ -5,11 +5,39 @@ import "./ForgotPasswordPage.css";
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
     if (!email.trim()) return;
-    setSubmitted(true);
+
+    setLoading(true);
+    setError("");
+    setSubmitted(false);
+
+    try {
+      const response = await fetch("http://localhost:3000/api/auth/forgot-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email.trim(),
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.success === false) {
+        throw new Error(data?.message || "Erreur serveur lors de l'envoi du lien de reinitialisation.");
+      }
+
+      setSubmitted(true);
+    } catch (submitError) {
+      setError(submitError.message || "Erreur serveur lors de l'envoi du lien de reinitialisation.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -20,9 +48,10 @@ export default function ForgotPasswordPage() {
 
         {submitted ? (
           <div className="auth-simple-alert auth-simple-alert--success">
-            Si un compte existe pour cet email, la reinitialisation pourra etre envoyee quand le backend mail sera branche.
+            Si un compte existe avec cet email, un lien de reinitialisation a ete envoye.
           </div>
         ) : null}
+        {error ? <div className="auth-simple-alert auth-simple-alert--error">{error}</div> : null}
 
         <form onSubmit={handleSubmit} className="auth-simple-form">
           <label>
@@ -30,13 +59,16 @@ export default function ForgotPasswordPage() {
             <input
               type="email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                setError("");
+              }}
               placeholder="nom@leoni.com"
               required
             />
           </label>
 
-          <button type="submit">Envoyer</button>
+          <button type="submit" disabled={loading}>{loading ? "Envoi..." : "Envoyer"}</button>
         </form>
 
         <Link to="/login" className="auth-simple-link">Retour a la connexion</Link>

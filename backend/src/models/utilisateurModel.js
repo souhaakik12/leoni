@@ -16,6 +16,8 @@ function mapUtilisateurRow(row) {
         AccesFoyer: Number(row.AccesFoyer ?? 0),
         InviteToken: row.InviteToken ?? null,
         InviteTokenExpire: row.InviteTokenExpire ?? null,
+        ResetToken: row.ResetToken ?? null,
+        ResetTokenExpire: row.ResetTokenExpire ?? null,
     };
 }
 
@@ -34,7 +36,9 @@ async function findActiveByEmail(email) {
                 CreeLe,
                 AccesFoyer,
                 InviteToken,
-                InviteTokenExpire
+                InviteTokenExpire,
+                ResetToken,
+                ResetTokenExpire
             FROM dbo.Utilisateurs
             WHERE LOWER(Email) = LOWER(@email)
               AND Actif = 1;
@@ -58,7 +62,9 @@ async function findActiveById(id) {
                 CreeLe,
                 AccesFoyer,
                 InviteToken,
-                InviteTokenExpire
+                InviteTokenExpire,
+                ResetToken,
+                ResetTokenExpire
             FROM dbo.Utilisateurs
             WHERE Id = @id
               AND Actif = 1;
@@ -82,7 +88,9 @@ async function findByEmail(email) {
                 CreeLe,
                 AccesFoyer,
                 InviteToken,
-                InviteTokenExpire
+                InviteTokenExpire,
+                ResetToken,
+                ResetTokenExpire
             FROM dbo.Utilisateurs
             WHERE LOWER(Email) = LOWER(@email);
         `);
@@ -106,7 +114,9 @@ async function findByEmailExceptId(email, id) {
                 CreeLe,
                 AccesFoyer,
                 InviteToken,
-                InviteTokenExpire
+                InviteTokenExpire,
+                ResetToken,
+                ResetTokenExpire
             FROM dbo.Utilisateurs
             WHERE LOWER(Email) = LOWER(@email)
               AND Id <> @id;
@@ -143,7 +153,9 @@ async function findAll(search = "") {
             CreeLe,
             AccesFoyer,
             InviteToken,
-            InviteTokenExpire
+            InviteTokenExpire,
+            ResetToken,
+            ResetTokenExpire
         FROM dbo.Utilisateurs
         ${whereClause}
         ORDER BY NomComplet ASC, Id DESC;
@@ -183,7 +195,9 @@ async function createWithInvite(data) {
                 INSERTED.CreeLe,
                 INSERTED.AccesFoyer,
                 INSERTED.InviteToken,
-                INSERTED.InviteTokenExpire
+                INSERTED.InviteTokenExpire,
+                INSERTED.ResetToken,
+                INSERTED.ResetTokenExpire
             VALUES (
                 @NomComplet,
                 @Email,
@@ -225,7 +239,9 @@ async function updateUtilisateur(id, data) {
                 INSERTED.CreeLe,
                 INSERTED.AccesFoyer,
                 INSERTED.InviteToken,
-                INSERTED.InviteTokenExpire
+                INSERTED.InviteTokenExpire,
+                INSERTED.ResetToken,
+                INSERTED.ResetTokenExpire
             WHERE Id = @Id;
         `);
 
@@ -248,7 +264,9 @@ async function deleteUtilisateur(id) {
                 DELETED.CreeLe,
                 DELETED.AccesFoyer,
                 DELETED.InviteToken,
-                DELETED.InviteTokenExpire
+                DELETED.InviteTokenExpire,
+                DELETED.ResetToken,
+                DELETED.ResetTokenExpire
             WHERE Id = @Id;
         `);
 
@@ -270,7 +288,9 @@ async function findByInviteToken(token) {
                 CreeLe,
                 AccesFoyer,
                 InviteToken,
-                InviteTokenExpire
+                InviteTokenExpire,
+                ResetToken,
+                ResetTokenExpire
             FROM dbo.Utilisateurs
             WHERE InviteToken = @InviteToken;
         `);
@@ -300,7 +320,9 @@ async function activateAccountWithPassword(token, password) {
                 INSERTED.CreeLe,
                 INSERTED.AccesFoyer,
                 INSERTED.InviteToken,
-                INSERTED.InviteTokenExpire
+                INSERTED.InviteTokenExpire,
+                INSERTED.ResetToken,
+                INSERTED.ResetTokenExpire
             WHERE InviteToken = @InviteToken
               AND ISNULL(Actif, 0) = 0
               AND InviteTokenExpire IS NOT NULL
@@ -331,7 +353,9 @@ async function updateProfileByEmail(email, data) {
                 INSERTED.CreeLe,
                 INSERTED.AccesFoyer,
                 INSERTED.InviteToken,
-                INSERTED.InviteTokenExpire
+                INSERTED.InviteTokenExpire,
+                INSERTED.ResetToken,
+                INSERTED.ResetTokenExpire
             WHERE LOWER(Email) = LOWER(@email)
               AND Actif = 1;
         `);
@@ -360,7 +384,9 @@ async function updateProfileById(id, data) {
                 INSERTED.CreeLe,
                 INSERTED.AccesFoyer,
                 INSERTED.InviteToken,
-                INSERTED.InviteTokenExpire
+                INSERTED.InviteTokenExpire,
+                INSERTED.ResetToken,
+                INSERTED.ResetTokenExpire
             WHERE Id = @id
               AND Actif = 1;
         `);
@@ -386,7 +412,9 @@ async function updatePasswordByEmail(email, newPassword) {
                 INSERTED.CreeLe,
                 INSERTED.AccesFoyer,
                 INSERTED.InviteToken,
-                INSERTED.InviteTokenExpire
+                INSERTED.InviteTokenExpire,
+                INSERTED.ResetToken,
+                INSERTED.ResetTokenExpire
             WHERE LOWER(Email) = LOWER(@email)
               AND Actif = 1;
         `);
@@ -412,9 +440,100 @@ async function updatePasswordById(id, newPassword) {
                 INSERTED.CreeLe,
                 INSERTED.AccesFoyer,
                 INSERTED.InviteToken,
-                INSERTED.InviteTokenExpire
+                INSERTED.InviteTokenExpire,
+                INSERTED.ResetToken,
+                INSERTED.ResetTokenExpire
             WHERE Id = @id
               AND Actif = 1;
+        `);
+
+    return mapUtilisateurRow(result.recordset?.[0]);
+}
+
+async function setResetTokenById(id, token, expireDate) {
+    const pool = await sql.connect(config);
+    const result = await pool.request()
+        .input("id", sql.Int, id)
+        .input("ResetToken", sql.VarChar(255), token)
+        .input("ResetTokenExpire", sql.DateTime, expireDate)
+        .query(`
+            UPDATE dbo.Utilisateurs
+            SET
+                ResetToken = @ResetToken,
+                ResetTokenExpire = @ResetTokenExpire
+            OUTPUT
+                INSERTED.Id,
+                INSERTED.NomComplet,
+                INSERTED.Email,
+                INSERTED.MotDePasse,
+                INSERTED.Role,
+                INSERTED.Actif,
+                INSERTED.CreeLe,
+                INSERTED.AccesFoyer,
+                INSERTED.InviteToken,
+                INSERTED.InviteTokenExpire,
+                INSERTED.ResetToken,
+                INSERTED.ResetTokenExpire
+            WHERE Id = @id;
+        `);
+
+    return mapUtilisateurRow(result.recordset?.[0]);
+}
+
+async function findByResetToken(token) {
+    const pool = await sql.connect(config);
+    const result = await pool.request()
+        .input("ResetToken", sql.VarChar(255), token)
+        .query(`
+            SELECT TOP 1
+                Id,
+                NomComplet,
+                Email,
+                MotDePasse,
+                Role,
+                Actif,
+                CreeLe,
+                AccesFoyer,
+                InviteToken,
+                InviteTokenExpire,
+                ResetToken,
+                ResetTokenExpire
+            FROM dbo.Utilisateurs
+            WHERE ResetToken = @ResetToken
+              AND Actif = 1;
+        `);
+
+    return mapUtilisateurRow(result.recordset?.[0]);
+}
+
+async function resetPasswordByToken(token, password) {
+    const pool = await sql.connect(config);
+    const result = await pool.request()
+        .input("ResetToken", sql.VarChar(255), token)
+        .input("MotDePasse", sql.VarChar(255), password)
+        .query(`
+            UPDATE dbo.Utilisateurs
+            SET
+                MotDePasse = @MotDePasse,
+                ResetToken = NULL,
+                ResetTokenExpire = NULL
+            OUTPUT
+                INSERTED.Id,
+                INSERTED.NomComplet,
+                INSERTED.Email,
+                INSERTED.MotDePasse,
+                INSERTED.Role,
+                INSERTED.Actif,
+                INSERTED.CreeLe,
+                INSERTED.AccesFoyer,
+                INSERTED.InviteToken,
+                INSERTED.InviteTokenExpire,
+                INSERTED.ResetToken,
+                INSERTED.ResetTokenExpire
+            WHERE ResetToken = @ResetToken
+              AND Actif = 1
+              AND ResetTokenExpire IS NOT NULL
+              AND ResetTokenExpire >= GETDATE();
         `);
 
     return mapUtilisateurRow(result.recordset?.[0]);
@@ -435,6 +554,9 @@ module.exports = {
     updateProfileById,
     updatePasswordByEmail,
     updatePasswordById,
+    setResetTokenById,
+    findByResetToken,
+    resetPasswordByToken,
     listUsers: findAll,
     createUser: createWithInvite,
     updateUser: updateUtilisateur,

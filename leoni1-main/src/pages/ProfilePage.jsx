@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { ROLE_ADMIN, ROLE_RECRUTEUR, ROLE_RESPONSABLE_CONTRAT, buildRoleHeaders, hasFoyerAccess, normalizeRole } from "../utils/roles.js";
+import { validatePassword } from "../utils/passwordValidation.js";
 import "./ProfilePage.css";
 
 const roleInfo = {
@@ -525,8 +526,9 @@ export default function ProfilePage() {
       return;
     }
 
-    if (newPassword.length < 8) {
-      setPasswordError("Le nouveau mot de passe doit contenir au moins 8 caracteres.");
+    const passwordValidation = validatePassword(newPassword);
+    if (!passwordValidation.isValid) {
+      setPasswordError(passwordValidation.message);
       return;
     }
 

@@ -173,6 +173,10 @@
   overflow: hidden;
 }
 
+.cand-modal-large {
+  width: min(760px, 100%);
+}
+
 .cand-modal-head,
 .cand-modal-body,
 .cand-modal-actions {
@@ -235,6 +239,18 @@
   border-top: 1px solid #edf3f8;
 }
 
+.cand-modal-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.cand-modal-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .cand-modal-actions button {
   min-height: 42px;
   border-radius: 10px;
@@ -255,6 +271,13 @@
   background: #d54848;
   color: #fff;
   box-shadow: 0 8px 18px rgba(197, 64, 64, 0.18);
+}
+
+.cand-modal-save {
+  border: 1px solid #1f6fa0;
+  background: linear-gradient(180deg, #2c86bb 0%, #1f6f9f 100%);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(31, 111, 159, 0.18);
 }
 
 .cand-modal-actions button:disabled {
@@ -1138,6 +1161,7 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  margin-top: 4px;
 }
 
 .action-link {
@@ -1221,6 +1245,14 @@
   .cand-board,
   .cand-create-box,
   .cand-type-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .cand-modal-large {
+    width: 100%;
+  }
+
+  .cand-modal-grid {
     grid-template-columns: 1fr;
   }
 

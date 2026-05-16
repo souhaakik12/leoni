@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { validatePassword } from "../utils/passwordValidation.js";
 import "./SetupAccountPage.css";
 
 const API_BASE_URL = "http://localhost:3000/api/utilisateurs/invite";
@@ -108,8 +109,9 @@ export default function SetupAccountPage() {
       return;
     }
 
-    if (trimmedPassword.length < 8) {
-      setError("Le mot de passe doit contenir au moins 8 caractères.");
+    const passwordValidation = validatePassword(trimmedPassword);
+    if (!passwordValidation.isValid) {
+      setError(passwordValidation.message);
       return;
     }
 

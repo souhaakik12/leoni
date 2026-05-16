@@ -124,6 +124,34 @@ async function findCandidatByCin(cin) {
     return result.recordset?.[0] || null;
 }
 
+async function findCandidatById(candidatId) {
+    const pool = await sql.connect(config);
+    const result = await pool.request()
+        .input("id", sql.Int, candidatId)
+        .query(`
+            SELECT TOP 1 id, cin
+            FROM dbo.candidats
+            WHERE id = @id;
+        `);
+
+    return result.recordset?.[0] || null;
+}
+
+async function findCandidatByCinExceptId(cin, candidatId) {
+    const pool = await sql.connect(config);
+    const result = await pool.request()
+        .input("cin", sql.VarChar, cin)
+        .input("id", sql.Int, candidatId)
+        .query(`
+            SELECT TOP 1 id, cin
+            FROM dbo.candidats
+            WHERE cin = @cin
+              AND id <> @id;
+        `);
+
+    return result.recordset?.[0] || null;
+}
+
 async function getCandidateSchema(pool) {
     const schemaResult = await pool.request().query(`
         SELECT
@@ -900,7 +928,9 @@ module.exports = {
     updateCandidat,
     updateWorkflowStepWithMovement,
     deleteCandidat,
+    findCandidatById,
     findCandidatByCin,
+    findCandidatByCinExceptId,
     signerContratCandidat,
     validerDossierContrat,
     CandidatContractError,

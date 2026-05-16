@@ -19,8 +19,8 @@ const candidateTypes = [
   {
     id: "candidat",
     short: "Candidat",
-    title: "Candidat (entree)",
-    desc: "Personne ajoutee directement au debut du processus de recrutement.",
+    title: "Candidat (entr\u00e9e)",
+    desc: "Personne ajout\u00e9e directement au d\u00e9but du processus de recrutement.",
     headerClass: "candidat",
     badgeBg: "#e8f2fa",
     badgeColor: "#1d6d9e",
@@ -29,7 +29,7 @@ const candidateTypes = [
     id: "test_passed",
     short: "Test / Entretien",
     title: "Candidats en phase test et entretien",
-    desc: "Passage entretien avec resultat OK ou NOK.",
+    desc: "Passage entretien avec r\u00e9sultat OK ou NOK.",
     headerClass: "test",
     badgeBg: "#e4f3fb",
     badgeColor: "#1c759f",
@@ -89,6 +89,37 @@ const niveaux = [
   "7 B",
   "8 B",
   "9 B",
+  "Baccalaur\u00e9at",
+  "BTP",
+  "BTS",
+  "BTS/BTP",
+  "CAP",
+  "Ing\u00e9nieur",
+  "Licence",
+  "Master",
+  "Non renseign\u00e9",
+  "Sans dipl\u00f4me",
+  "Technicien sup\u00e9rieur",
+];
+const postes = [
+  "Operateur cablage",
+  "Technicien controle",
+  "Agent qualite",
+  "Agent logistique",
+  "Technicien maintenance",
+  "Operateur production",
+];
+const niveauOptions = [
+  "Tous",
+  "1 AS",
+  "2 AS",
+  "3 AS",
+  "4 AS",
+  "6 AP",
+  "7 AS",
+  "7 B",
+  "8 B",
+  "9 B",
   "Baccalauréat",
   "BTP",
   "BTS",
@@ -100,14 +131,6 @@ const niveaux = [
   "Non renseigné",
   "Sans diplôme",
   "Technicien supérieur",
-];
-const postes = [
-  "Operateur cablage",
-  "Technicien controle",
-  "Agent qualite",
-  "Agent logistique",
-  "Technicien maintenance",
-  "Operateur production",
 ];
 const MAX_CIN_LENGTH = 8;
 const MAX_PHONE_LENGTH = 8;
@@ -570,6 +593,9 @@ export default function CandidatsPage() {
     [mouvements, visibleMovementCount]
   );
   const hasMoreMouvements = mouvements.length > visibleMovementCount;
+  const editingCandidate = editCandidateId
+    ? candidats.find((candidate) => candidate.id === editCandidateId) || null
+    : null;
 
   const pushToast = (message, type = "success", timeout = 2200) => {
     setToast({ message, type });
@@ -742,7 +768,7 @@ export default function CandidatsPage() {
   };
 
   const validateEditForm = () => {
-    const nextErrors = validateCandidateFields(editForm);
+    const nextErrors = validateCandidateFields(editForm, { requireGenre: true });
     setEditErrors(nextErrors);
     const isValid = Object.keys(nextErrors).length === 0;
     setEditMessage(isValid ? "" : "Veuillez corriger les champs obligatoires avant de modifier le candidat.");
@@ -783,18 +809,16 @@ export default function CandidatsPage() {
       });
 
       const text = await response.text();
-console.log("Réponse brute edit :", text);
+      let result = {};
+      try {
+        result = text ? JSON.parse(text) : {};
+      } catch (e) {
+        throw new Error("Le serveur renvoie du HTML au lieu de JSON.");
+      }
 
-let result = {};
-try {
-  result = text ? JSON.parse(text) : {};
-} catch (e) {
-  throw new Error("Le serveur renvoie du HTML au lieu de JSON.");
-}
-
-if (!response.ok) {
-  throw new Error(result?.message || "Erreur lors de la modification du candidat.");
-}
+      if (!response.ok) {
+        throw new Error(result?.message || "Erreur lors de l'ajout du candidat.");
+      }
 
       await fetchCandidats();
       if (typeof refreshCandidatsFromApi === "function") {
@@ -820,10 +844,10 @@ if (!response.ok) {
     try {
       const response = await fetch(`http://localhost:3000/api/candidats/${candidateId}`, {
         method: "PUT",
-        headers: {
+        headers: buildRoleHeaders(user, {
           "Content-Type": "application/json",
-        },
-        body: JSON.stringify(buildCandidatePayload(editForm)),
+        }),
+        body: JSON.stringify(buildCandidatePayload(editForm, { includeGenre: true })),
       });
 
       const result = await response.json();
@@ -837,7 +861,7 @@ if (!response.ok) {
       }
       await fetchMouvements();
       cancelEditCandidate();
-      pushToast("Candidat modifie avec succes.");
+      pushToast("Candidat modifié avec succès.");
     } catch (error) {
       const message = error?.message || "Erreur reseau lors de la modification.";
       setEditMessage(message);
@@ -926,6 +950,213 @@ if (!response.ok) {
         </div>
       )}
 
+      {editingCandidate && (
+        <div className="cand-modal-overlay" role="presentation" onClick={cancelEditCandidate}>
+          <div
+            className="cand-modal cand-modal-large"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cand-edit-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="cand-modal-head">
+              <h3 id="cand-edit-title">Modifier le candidat</h3>
+            </div>
+            <form className="cand-modal-form" onSubmit={(e) => handleEditSubmit(e, editingCandidate.id)}>
+              <div className="cand-modal-body">
+                {editMessage && <div className="cand-create-hint error">{editMessage}</div>}
+
+                <div className="cand-modal-candidate">
+                  <strong>{editingCandidate.nomComplet || "-"}</strong>
+                  <span>CIN : {editingCandidate.cin || "-"}</span>
+                </div>
+
+                <div className="cand-modal-grid">
+                  <div className={`cand-create-field ${editErrors.nom ? "is-invalid" : ""}`}>
+                    <label htmlFor="cand-edit-nom">Nom complet</label>
+                    <input
+                      id="cand-edit-nom"
+                      value={editForm.nom}
+                      onChange={(e) => {
+                        setEditForm((prev) => ({ ...prev, nom: e.target.value }));
+                        clearEditFieldError("nom");
+                      }}
+                      placeholder="Nom complet"
+                      required
+                      aria-invalid={Boolean(editErrors.nom)}
+                    />
+                    {editErrors.nom && <span className="cand-create-error">{editErrors.nom}</span>}
+                  </div>
+
+                  <div className={`cand-create-field ${editErrors.cin ? "is-invalid" : ""}`}>
+                    <label htmlFor="cand-edit-cin">CIN</label>
+                    <input
+                      id="cand-edit-cin"
+                      value={editForm.cin}
+                      onChange={(e) => {
+                        setEditForm((prev) => ({
+                          ...prev,
+                          cin: sanitizeDigits(e.target.value, MAX_CIN_LENGTH),
+                        }));
+                        clearEditFieldError("cin");
+                      }}
+                      placeholder="00000000"
+                      inputMode="numeric"
+                      pattern="\d{8}"
+                      maxLength={MAX_CIN_LENGTH}
+                      required
+                      aria-invalid={Boolean(editErrors.cin)}
+                    />
+                    {editErrors.cin && <span className="cand-create-error">{editErrors.cin}</span>}
+                  </div>
+
+                  <div className={`cand-create-field ${editErrors.telephone ? "is-invalid" : ""}`}>
+                    <label htmlFor="cand-edit-telephone">{"T\u00e9l\u00e9phone"}</label>
+                    <input
+                      id="cand-edit-telephone"
+                      value={editForm.telephone}
+                      onChange={(e) => {
+                        setEditForm((prev) => ({
+                          ...prev,
+                          telephone: sanitizeDigits(e.target.value, MAX_PHONE_LENGTH),
+                        }));
+                        clearEditFieldError("telephone");
+                      }}
+                      placeholder="22000000"
+                      inputMode="numeric"
+                      pattern="\d{8}"
+                      maxLength={MAX_PHONE_LENGTH}
+                      required
+                      aria-invalid={Boolean(editErrors.telephone)}
+                    />
+                    {editErrors.telephone && <span className="cand-create-error">{editErrors.telephone}</span>}
+                  </div>
+
+                  <div className={`cand-create-field ${editErrors.age ? "is-invalid" : ""}`}>
+                    <label htmlFor="cand-edit-age">{"\u00c2ge"}</label>
+                    <input
+                      id="cand-edit-age"
+                      value={editForm.age}
+                      onChange={(e) => {
+                        setEditForm((prev) => ({
+                          ...prev,
+                          age: sanitizeDigits(e.target.value, MAX_AGE_LENGTH),
+                        }));
+                        clearEditFieldError("age");
+                      }}
+                      placeholder="24"
+                      inputMode="numeric"
+                      pattern="\d+"
+                      maxLength={MAX_AGE_LENGTH}
+                      required
+                      aria-invalid={Boolean(editErrors.age)}
+                    />
+                    {editErrors.age && <span className="cand-create-error">{editErrors.age}</span>}
+                  </div>
+
+                  <div className={`cand-create-field ${editErrors.genre ? "is-invalid" : ""}`}>
+                    <label htmlFor="cand-edit-genre">Genre</label>
+                    <select
+                      id="cand-edit-genre"
+                      value={editForm.genre}
+                      onChange={(e) => {
+                        setEditForm((prev) => ({ ...prev, genre: e.target.value }));
+                        clearEditFieldError("genre");
+                      }}
+                      required
+                      aria-invalid={Boolean(editErrors.genre)}
+                    >
+                      <option value="">Sélectionner un genre</option>
+                      <option value="Femme">Femme</option>
+                      <option value="Homme">Homme</option>
+                    </select>
+                    {editErrors.genre && <span className="cand-create-error">{editErrors.genre}</span>}
+                  </div>
+
+                  <div className={`cand-create-field ${editErrors.niveauScolaire ? "is-invalid" : ""}`}>
+                    <label htmlFor="cand-edit-niveau">Niveau scolaire</label>
+                    <select
+                      id="cand-edit-niveau"
+                      value={editForm.niveauScolaire}
+                      onChange={(e) => {
+                        setEditForm((prev) => ({ ...prev, niveauScolaire: e.target.value }));
+                        clearEditFieldError("niveauScolaire");
+                      }}
+                      required
+                      aria-invalid={Boolean(editErrors.niveauScolaire)}
+                    >
+                      <option value="">Sélectionner un niveau</option>
+                      {niveauOptions
+                        .filter((niveau) => niveau !== "Tous")
+                        .map((niveau) => (
+                          <option key={niveau} value={niveau}>
+                            {niveau}
+                          </option>
+                        ))}
+                    </select>
+                    {editErrors.niveauScolaire && (
+                      <span className="cand-create-error">{editErrors.niveauScolaire}</span>
+                    )}
+                  </div>
+
+                  <div className={`cand-create-field ${editErrors.poste ? "is-invalid" : ""}`}>
+                    <label htmlFor="cand-edit-poste">Poste</label>
+                    <select
+                      id="cand-edit-poste"
+                      value={editForm.poste}
+                      onChange={(e) => {
+                        setEditForm((prev) => ({ ...prev, poste: e.target.value }));
+                        clearEditFieldError("poste");
+                      }}
+                      required
+                      aria-invalid={Boolean(editErrors.poste)}
+                    >
+                      {postes.map((posteOption) => (
+                        <option key={posteOption} value={posteOption}>
+                          {posteOption}
+                        </option>
+                      ))}
+                    </select>
+                    {editErrors.poste && <span className="cand-create-error">{editErrors.poste}</span>}
+                  </div>
+
+                  <div className={`cand-create-field cand-create-field-wide ${editErrors.adresse ? "is-invalid" : ""}`}>
+                    <label htmlFor="cand-edit-adresse">Adresse / Gouvernorat</label>
+                    <select
+                      id="cand-edit-adresse"
+                      value={editForm.adresse}
+                      onChange={(e) => {
+                        setEditForm((prev) => ({ ...prev, adresse: e.target.value }));
+                        clearEditFieldError("adresse");
+                      }}
+                      required
+                      aria-invalid={Boolean(editErrors.adresse)}
+                    >
+                      <option value="">Sélectionner un gouvernorat</option>
+                      {gouvernoratOptions.map((g) => (
+                        <option key={g} value={g}>
+                          {g}
+                        </option>
+                      ))}
+                    </select>
+                    {editErrors.adresse && <span className="cand-create-error">{editErrors.adresse}</span>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="cand-modal-actions">
+                <button type="button" className="cand-modal-cancel" onClick={cancelEditCandidate}>
+                  Annuler
+                </button>
+                <button type="submit" className="cand-modal-save">
+                  Enregistrer les modifications
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <div className="cand-header">
         <div>
           <h2>Gestion des Candidats</h2>
@@ -985,7 +1216,7 @@ if (!response.ok) {
           </div>
 
           <div className={`cand-create-field ${errors.telephone ? "is-invalid" : ""}`}>
-            <label htmlFor="cand-telephone">Telephone</label>
+            <label htmlFor="cand-telephone">{"T\u00e9l\u00e9phone"}</label>
             <input
               id="cand-telephone"
               value={telephone}
@@ -1005,7 +1236,7 @@ if (!response.ok) {
           </div>
 
           <div className={`cand-create-field ${errors.age ? "is-invalid" : ""}`}>
-            <label htmlFor="cand-age">Age</label>
+            <label htmlFor="cand-age">{"\u00c2ge"}</label>
             <input
               id="cand-age"
               type="text"
@@ -1055,8 +1286,8 @@ if (!response.ok) {
               required
               aria-invalid={Boolean(errors.niveauScolaire)}
             >
-              <option value="">Selectionner un niveau</option>
-              {niveaux
+              <option value="">Sélectionner un niveau</option>
+              {niveauOptions
                 .filter((niveau) => niveau !== "Tous")
                 .map((niveau) => (
                   <option key={niveau} value={niveau}>
@@ -1152,7 +1383,7 @@ if (!response.ok) {
         <div className="cand-filter-field">
           <label>Niveau</label>
           <select value={filtreNiveau} onChange={(e) => setFiltreNiveau(e.target.value)}>
-            {niveaux.map((n) => (
+            {niveauOptions.map((n) => (
               <option key={n}>{n}</option>
             ))}
           </select>
@@ -1277,10 +1508,7 @@ if (!response.ok) {
             ) : (
               lane.items.map((c) => {
                 const status = statutColors[c.statut] || statutColors[STATUS_NOUVEAU];
-                const tel = phoneHref(c.telephone);
-                const mail = c.email ? `mailto:${c.email}` : "";
                 const entretien = getEntretienMeta(c.entretienResult);
-                const isEditing = currentTypeId === "test_passed" && editCandidateId === c.id;
                 return (
                   <article key={c.id} className="cand-card">
                     <div className="cand-card-top">
@@ -1310,11 +1538,11 @@ if (!response.ok) {
                         <strong>{normalizeCanalEntree(c.canalEntree)}</strong>
                       </div>
                       <div>
-                        <label>Age</label>
+                        <label>{"\u00c2ge"}</label>
                         <strong>{c.age || "-"}</strong>
                       </div>
                       <div>
-                        <label>GENRE</label>
+                        <label>Genre</label>
                         <strong>{c.genre || "-"}</strong>
                       </div>
                       <div>
@@ -1330,11 +1558,11 @@ if (!response.ok) {
                         <strong>{c.adresse || "-"}</strong>
                       </div>
                       <div>
-                        <label>Residence</label>
+                        <label>{"R\u00e9sidence"}</label>
                         <strong>{c.gouvernoratResidence || "-"}</strong>
                       </div>
                       <div>
-                        <label>Telephone</label>
+                        <label>{"T\u00e9l\u00e9phone"}</label>
                         <strong>{c.telephone || "-"}</strong>
                       </div>
                       {c.notes && (
@@ -1374,184 +1602,10 @@ if (!response.ok) {
                       </div>
                     )}
 
-                    {isEditing && (
-                      <form className="cand-create-box cand-edit-box" onSubmit={(e) => handleEditSubmit(e, c.id)}>
-                        {editMessage && <div className="cand-create-hint error">{editMessage}</div>}
-
-                        <div className={`cand-create-field ${editErrors.nom ? "is-invalid" : ""}`}>
-                          <label htmlFor={`edit-nom-${c.id}`}>Nom complet</label>
-                          <input
-                            id={`edit-nom-${c.id}`}
-                            value={editForm.nom}
-                            onChange={(e) => {
-                              setEditForm((prev) => ({ ...prev, nom: e.target.value }));
-                              clearEditFieldError("nom");
-                            }}
-                            required
-                            aria-invalid={Boolean(editErrors.nom)}
-                          />
-                          {editErrors.nom && <span className="cand-create-error">{editErrors.nom}</span>}
-                        </div>
-
-                        <div className={`cand-create-field ${editErrors.cin ? "is-invalid" : ""}`}>
-                          <label htmlFor={`edit-cin-${c.id}`}>CIN</label>
-                          <input
-                            id={`edit-cin-${c.id}`}
-                            value={editForm.cin}
-                            onChange={(e) => {
-                              setEditForm((prev) => ({
-                                ...prev,
-                                cin: sanitizeDigits(e.target.value, MAX_CIN_LENGTH),
-                              }));
-                              clearEditFieldError("cin");
-                            }}
-                            inputMode="numeric"
-                            pattern="\d{8}"
-                            maxLength={MAX_CIN_LENGTH}
-                            required
-                            aria-invalid={Boolean(editErrors.cin)}
-                          />
-                          {editErrors.cin && <span className="cand-create-error">{editErrors.cin}</span>}
-                        </div>
-
-                        <div className={`cand-create-field ${editErrors.telephone ? "is-invalid" : ""}`}>
-                          <label htmlFor={`edit-tel-${c.id}`}>Telephone</label>
-                          <input
-                            id={`edit-tel-${c.id}`}
-                            value={editForm.telephone}
-                            onChange={(e) => {
-                              setEditForm((prev) => ({
-                                ...prev,
-                                telephone: sanitizeDigits(e.target.value, MAX_PHONE_LENGTH),
-                              }));
-                              clearEditFieldError("telephone");
-                            }}
-                            inputMode="numeric"
-                            pattern="\d{8}"
-                            maxLength={MAX_PHONE_LENGTH}
-                            required
-                            aria-invalid={Boolean(editErrors.telephone)}
-                          />
-                          {editErrors.telephone && <span className="cand-create-error">{editErrors.telephone}</span>}
-                        </div>
-
-                        <div className={`cand-create-field ${editErrors.age ? "is-invalid" : ""}`}>
-                          <label htmlFor={`edit-age-${c.id}`}>Age</label>
-                          <input
-                            id={`edit-age-${c.id}`}
-                            value={editForm.age}
-                            onChange={(e) => {
-                              setEditForm((prev) => ({
-                                ...prev,
-                                age: sanitizeDigits(e.target.value, MAX_AGE_LENGTH),
-                              }));
-                              clearEditFieldError("age");
-                            }}
-                            inputMode="numeric"
-                            pattern="\d+"
-                            maxLength={MAX_AGE_LENGTH}
-                            required
-                            aria-invalid={Boolean(editErrors.age)}
-                          />
-                          {editErrors.age && <span className="cand-create-error">{editErrors.age}</span>}
-                        </div>
-
-                        <div className={`cand-create-field ${editErrors.niveauScolaire ? "is-invalid" : ""}`}>
-                          <label htmlFor={`edit-niveau-${c.id}`}>Niveau scolaire</label>
-                          <select
-                            id={`edit-niveau-${c.id}`}
-                            value={editForm.niveauScolaire}
-                            onChange={(e) => {
-                              setEditForm((prev) => ({ ...prev, niveauScolaire: e.target.value }));
-                              clearEditFieldError("niveauScolaire");
-                            }}
-                            required
-                            aria-invalid={Boolean(editErrors.niveauScolaire)}
-                          >
-                            <option value="">Selectionner un niveau</option>
-                            {niveaux
-                              .filter((niveau) => niveau !== "Tous")
-                              .map((niveau) => (
-                                <option key={niveau} value={niveau}>
-                                  {niveau}
-                                </option>
-                              ))}
-                          </select>
-                          {editErrors.niveauScolaire && (
-                            <span className="cand-create-error">{editErrors.niveauScolaire}</span>
-                          )}
-                        </div>
-
-                        <div className={`cand-create-field ${editErrors.poste ? "is-invalid" : ""}`}>
-                          <label htmlFor={`edit-poste-${c.id}`}>Poste</label>
-                          <select
-                            id={`edit-poste-${c.id}`}
-                            value={editForm.poste}
-                            onChange={(e) => {
-                              setEditForm((prev) => ({ ...prev, poste: e.target.value }));
-                              clearEditFieldError("poste");
-                            }}
-                            required
-                            aria-invalid={Boolean(editErrors.poste)}
-                          >
-                            {postes.map((posteOption) => (
-                              <option key={posteOption} value={posteOption}>
-                                {posteOption}
-                              </option>
-                            ))}
-                          </select>
-                          {editErrors.poste && <span className="cand-create-error">{editErrors.poste}</span>}
-                        </div>
-
-                        <div className={`cand-create-field cand-create-field-wide ${editErrors.adresse ? "is-invalid" : ""}`}>
-                          <label htmlFor={`edit-adresse-${c.id}`}>Adresse</label>
-                          <input
-                            id={`edit-adresse-${c.id}`}
-                            value={editForm.adresse}
-                            onChange={(e) => {
-                              setEditForm((prev) => ({ ...prev, adresse: e.target.value }));
-                              clearEditFieldError("adresse");
-                            }}
-                            required
-                            aria-invalid={Boolean(editErrors.adresse)}
-                          />
-                          {editErrors.adresse && <span className="cand-create-error">{editErrors.adresse}</span>}
-                        </div>
-
-                        <div className="cand-edit-actions">
-                          <button type="submit" className="cand-create-submit">
-                            Enregistrer
-                          </button>
-                          <button type="button" className="action-link" onClick={cancelEditCandidate}>
-                            Annuler
-                          </button>
-                        </div>
-                      </form>
-                    )}
-
                     <div className="cand-actions">
-                      {currentTypeId === "test_passed" ? (
-                        <button className="action-link" onClick={() => startEditCandidate(c)}>
-                          Edit
-                        </button>
-                      ) : (
-                        <a
-                          className={`action-link ${!tel ? "disabled" : ""}`}
-                          href={tel || "#"}
-                          onClick={(e) => !tel && e.preventDefault()}
-                        >
-                          Appeler
-                        </a>
-                      )}
-                      {currentTypeId !== "test_passed" && (
-                        <a
-                          className={`action-link ${!mail ? "disabled" : ""}`}
-                          href={mail || "#"}
-                          onClick={(e) => !mail && e.preventDefault()}
-                        >
-                          Envoyer mail
-                        </a>
-                      )}
+                      <button type="button" className="action-link" onClick={() => startEditCandidate(c)}>
+                        Modifier
+                      </button>
                       {currentTypeId === "test_passed" && (
                         <button className="dossier-link" onClick={() => openDossier(c.id)}>
                           Consulter dossier

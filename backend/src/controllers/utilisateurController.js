@@ -7,6 +7,7 @@ const {
     normalizeRole,
 } = require("../middleware/roleMiddleware");
 const utilisateurModel = require("../models/utilisateurModel");
+const { validatePassword } = require("../utils/passwordValidation");
 
 const ALLOWED_ROLES = [ROLE_ADMIN, ROLE_RECRUTEUR, ROLE_RESPONSABLE_CONTRAT];
 const INVITE_EXPIRATION_HOURS = 72;
@@ -330,6 +331,14 @@ exports.setupAccount = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "Mot de passe obligatoire.",
+            });
+        }
+
+        const passwordValidation = validatePassword(password);
+        if (!passwordValidation.isValid) {
+            return res.status(400).json({
+                success: false,
+                message: passwordValidation.message,
             });
         }
 

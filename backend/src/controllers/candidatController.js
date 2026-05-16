@@ -225,9 +225,9 @@ exports.updateCandidat = async (req, res) => {
             return res.status(400).json({ message: "Identifiant candidat invalide." });
         }
 
-        if (!nom || !cin || !telephone || !age || !niveauScolaire || !poste || !adresse) {
+        if (!nom || !cin || !telephone || !age || !genre || !niveauScolaire || !poste || !adresse) {
             return res.status(400).json({
-                message: "Tous les champs sont obligatoires : nom, cin, telephone, age, niveau_scolaire, poste et adresse.",
+                message: "Tous les champs sont obligatoires : nom, cin, telephone, age, genre, niveau_scolaire, poste et adresse.",
             });
         }
 
@@ -243,8 +243,18 @@ exports.updateCandidat = async (req, res) => {
             });
         }
 
-        if (genre && !ALLOWED_GENRES.includes(genre)) {
+        if (!ALLOWED_GENRES.includes(genre)) {
             return res.status(400).json({ message: "Genre invalide" });
+        }
+
+        const candidatExistant = await candidatModel.findCandidatById(id);
+        if (!candidatExistant) {
+            return res.status(404).json({ message: "Candidat introuvable." });
+        }
+
+        const existingCandidat = await candidatModel.findCandidatByCinExceptId(cin, id);
+        if (existingCandidat) {
+            return res.status(409).json({ message: getDuplicateCinMessage() });
         }
 
         const candidat = await candidatModel.updateCandidat(id, {
@@ -255,7 +265,7 @@ exports.updateCandidat = async (req, res) => {
             niveau_scolaire: niveauScolaire,
             poste,
             adresse,
-            ...(genre ? { genre } : {}),
+            genre,
         });
 
         if (!candidat) {
@@ -267,6 +277,9 @@ exports.updateCandidat = async (req, res) => {
             candidat,
         });
     } catch (err) {
+        if (isDuplicateCinError(err)) {
+            return res.status(409).json({ message: getDuplicateCinMessage() });
+        }
         console.error(err);
         res.status(500).json({ message: err.message || "Modification candidat impossible." });
     }

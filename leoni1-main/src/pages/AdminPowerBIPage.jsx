@@ -35,7 +35,7 @@ export default function AdminPowerBIPage() {
     <div className="admin-powerbi-page">
       <section className="admin-powerbi-hero">
         <div className="admin-powerbi-hero-badge">Administration RH</div>
-        <h2>Tableaux de bord décisionnels</h2>
+        <h2>Tableaux de bord </h2>
         <p>Suivi des candidats, contrats et missions</p>
       </section>
 
