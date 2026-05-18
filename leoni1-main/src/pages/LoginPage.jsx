@@ -71,8 +71,8 @@ export default function LoginPage() {
 
         <section className="login-right">
           <div className="login-card">
-            <h2>Welcome back</h2>
-            <p>Please enter your details.</p>
+            <h2>Bienvenue</h2>
+            <p>Veuillez saisir vos informations.</p>
 
             {error && <div className="login-error">{error}</div>}
 
@@ -82,10 +82,10 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => { setEmail(e.target.value); setError(""); }}
               onKeyDown={handleKeyDown}
-              placeholder="Enter your e-mail"
+              placeholder="Saisir votre e-mail"
             />
 
-            <label>Password</label>
+            <label>Mot de passe</label>
             <input
               type="password"
               value={password}
@@ -97,16 +97,16 @@ export default function LoginPage() {
             <div className="login-options">
               <label className="remember-check">
                 <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-                <span>Remember me</span>
+                <span>Se souvenir de moi</span>
               </label>
-              <button className="ghost-link" onClick={() => navigate("/forgot-password")}>Mot de passe oublie ?</button>
+              <button className="ghost-link" onClick={() => navigate("/forgot-password")}>Mot de passe oublié ?</button>
             </div>
 
             <button className="login-submit" onClick={handleSubmit} disabled={loading}>
               {loading ? "Connexion..." : "Se connecter"}
             </button>
 
-            <div className="demo-label">Demo accounts</div>
+            <div className="demo-label">COMPTES DE DÉMO</div>
             <div className="demo-row">
               {demoAccounts.map((d) => (
                 <button key={d.role} onClick={() => fillDemo(d.role)}>{d.label}</button>

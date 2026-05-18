@@ -3,15 +3,15 @@ import "./AdminPowerBIPage.css";
 
 const POWERBI_REPORTS = {
   recrutement: {
-    title: "Tableau de bord recrutement",
+    title: "",
     url: "https://app.powerbi.com/reportEmbed?reportId=38416229-5f47-4806-a503-fd9afb465f25&autoAuth=true&ctid=473589e1-58a6-410a-88b9-844304b94936",
   },
   contrats: {
-    title: "Tableau de bord contrats",
+    title: "",
     url: "https://app.powerbi.com/reportEmbed?reportId=f7af3692-d4ca-4808-a827-b313dfd2bafc&autoAuth=true&ctid=473589e1-58a6-410a-88b9-844304b94936",
   },
   missions: {
-    title: "Tableau de bord missions",
+    title: "",
     url: "https://app.powerbi.com/reportEmbed?reportId=12a8adbd-45ef-4e61-b00d-b1962479d240&autoAuth=true&ctid=473589e1-58a6-410a-88b9-844304b94936",
   },
 };

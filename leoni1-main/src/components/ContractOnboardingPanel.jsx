@@ -43,6 +43,14 @@ function formatDateTime(value) {
   });
 }
 
+function formatStatusLabel(value) {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  if (normalized === "SIGNE") return "SIGNÉ";
+  if (normalized === "VALIDE") return "VALIDÉ";
+  if (normalized === "INCOMPLET") return "INCOMPLET";
+  return String(value ?? "").trim() || "-";
+}
+
 function getMaritalStatusValue(candidat, maritalStatusDrafts = {}) {
   const localValue = maritalStatusDrafts?.[candidat?.id];
   if (localValue === "marie" || localValue === "non_marie") {
@@ -263,13 +271,13 @@ export default function ContractOnboardingPanel() {
 
       const payload = await response.json().catch(() => null);
       if (!response.ok) {
-        throw new Error(payload?.message || "Mise a jour du document impossible.");
+        throw new Error(payload?.message || "Mise à jour du document impossible.");
       }
 
       await loadCandidateDocuments(candidate.id, { silent: true });
-      pushToast(payload?.message || "Document mis a jour.", "success", 2200);
+      pushToast(payload?.message || "Document mis à jour.", "success", 2200);
     } catch (error) {
-      pushToast(error?.message || "Mise a jour du document impossible.", "error", 3400);
+      pushToast(error?.message || "Mise à jour du document impossible.", "error", 3400);
     } finally {
       setDocumentActionDrafts((prev) => {
         const next = { ...prev };
@@ -286,27 +294,27 @@ export default function ContractOnboardingPanel() {
   const handleValidateDossier = async (candidate) => {
     const workflow = computeCandidateWorkflow(candidate, documentsByCandidateId);
     if (workflow.dossierValide) {
-      pushToast(`Le dossier de ${candidate.nomComplet} est deja valide.`, "info");
+      pushToast(`Le dossier de ${candidate.nomComplet} est déjà validé.`, "info");
       return;
     }
     if (!workflow.progress.isComplete) {
-      pushToast("Le dossier ne peut pas etre valide : documents manquants.", "error", 3200);
+      pushToast("Le dossier ne peut pas être validé : documents manquants.", "error", 3200);
       return;
     }
 
     const result = await validerDossierContrat(candidate.id, { dossierComplet: true });
     if (!result?.ok) {
-      pushToast(result?.message || "Validation dossier impossible.", "error", 3400);
+      pushToast(result?.message || "Validation du dossier impossible.", "error", 3400);
       return;
     }
 
-    pushToast(result?.message || "Dossier valide.", "success", 3200);
+    pushToast(result?.message || "Dossier validé.", "success", 3200);
   };
 
   const handleSignContract = async (candidate) => {
     const workflow = computeCandidateWorkflow(candidate, documentsByCandidateId);
     if (workflow.contratSigne) {
-      pushToast(`Le contrat de ${candidate.nomComplet} est deja signe.`, "info");
+      pushToast(`Le contrat de ${candidate.nomComplet} est déjà signé.`, "info");
       return;
     }
 
@@ -335,11 +343,11 @@ export default function ContractOnboardingPanel() {
     });
     if (!result?.ok) {
       console.error("[ContractOnboardingPanel] Signature contrat echec", result);
-      pushToast(result?.message || "Signature contrat impossible.", "error", 3400);
+      pushToast(result?.message || "Signature du contrat impossible.", "error", 3400);
       return;
     }
 
-    pushToast(result?.message || "Contrat signe.", "success", 3200);
+    pushToast(result?.message || "Contrat signé.", "success", 3200);
   };
 
   const handleTypeContratChange = async (candidate, nextType) => {
@@ -353,10 +361,10 @@ export default function ContractOnboardingPanel() {
     try {
       const result = await setCandidatTypeContrat(candidate.id, normalizedType);
       if (!result?.ok) {
-        pushToast(result?.message || "Mise a jour du type contrat impossible.", "error", 3200);
+        pushToast(result?.message || "Mise à jour du type de contrat impossible.", "error", 3200);
         return;
       }
-      pushToast(result?.message || `Type contrat mis a jour (${normalizedType}).`, "success", 1800);
+      pushToast(result?.message || `Type de contrat mis à jour (${normalizedType}).`, "success", 1800);
     } finally {
       setSavingTypeDrafts((prev) => {
         const next = { ...prev };
@@ -376,8 +384,8 @@ export default function ContractOnboardingPanel() {
       <header className="dossier-board-head">
         <div className="dossier-head-content">
           <span className="dossier-category-badge">SERVICE CONTRATS</span>
-          <h3>Dossier Contrat - Service Contrats</h3>
-          <p>Vue compacte: utilisez "Afficher les documents" pour ouvrir le detail d'un candidat.</p>
+          <h3>Dossier contrat - Service contrats</h3>
+          <p>Vue compacte : utilisez "Afficher les documents" pour ouvrir le détail d'un candidat.</p>
         </div>
         <div className="dossier-board-kpi">
           <strong>{queue.length}</strong>
@@ -412,28 +420,28 @@ export default function ContractOnboardingPanel() {
             onClick={() => setActiveTab(TAB_VALIDES)}
             type="button"
           >
-            Dossiers valides
+            Dossiers validés
             <span>{validatedQueue.length}</span>
           </button>
         </div>
       </div>
 
       {!hasTrackedCandidates ? (
-        <div className="dossier-empty-state">Aucun candidat a l'etape DOSSIER_CONTRAT.</div>
+        <div className="dossier-empty-state">Aucun candidat à l'étape DOSSIER_CONTRAT.</div>
       ) : activeQueue.length === 0 ? (
-        <div className="dossier-empty-state">Aucun candidat trouve.</div>
+        <div className="dossier-empty-state">Aucun candidat trouvé.</div>
       ) : (
         <div className="dossier-list">
           {activeQueue.map((candidate) => {
             const workflow = computeCandidateWorkflow(candidate, documentsByCandidateId);
             const progress = workflow.progress;
-            const typeContrat = normalizeContractType(candidate.type_contrat || candidate.typeContrat) || "Non renseigne";
-            const contratLabel = workflow.contratSigne ? "Signe" : "Non signe";
+            const typeContrat = normalizeContractType(candidate.type_contrat || candidate.typeContrat) || "Non renseigné";
+            const contratLabel = workflow.contratSigne ? "signé" : "non signé";
             const dossierLabel = workflow.dossierValide
-              ? "Valide"
+              ? "validé"
               : progress.isComplete
-                ? "Complet a valider"
-                : "Incomplet";
+                ? "complet à valider"
+                : "incomplet";
             const dossierBadgeState = workflow.dossierValide ? "ok" : progress.isComplete ? "info" : "warn";
             const maritalStatusValue = getMaritalStatusValue(candidate, maritalStatusDrafts);
             const isLoadingDocuments = Boolean(documentsLoadingByCandidateId[candidate.id]);
@@ -451,35 +459,35 @@ export default function ContractOnboardingPanel() {
                   <div className="dossier-summary-top">
                     <div className="dossier-identity">
                       <h4>{candidate.nomComplet || "Candidat sans nom"}</h4>
-                      <p>CIN: {candidate.cin || "-"} | Type contrat: {typeContrat}</p>
+                      <p>CIN : {candidate.cin || "-"} | Type de contrat : {typeContrat}</p>
                     </div>
                     <div className="dossier-head-badges">
                       <span className="badge type">{typeContrat}</span>
                       <span className={`badge status ${workflow.contratSigne ? "ok" : "warn"}`}>Contrat {contratLabel}</span>
                       <span className={`badge status ${dossierBadgeState}`}>Dossier {dossierLabel}</span>
-                      {workflow.finalise && <span className="badge status ok">Nouveau recrute</span>}
+                      {workflow.finalise && <span className="badge status ok">Nouveau recruté</span>}
                     </div>
                   </div>
 
                   {showValidatedView ? (
                     <div className="validated-summary-grid">
                       <div>
-                        <span>Statut contrat</span>
-                        <strong>{candidate?.statutContrat || candidate?.statut_contrat || contratLabel}</strong>
+                        <span>Statut du contrat</span>
+                        <strong>{formatStatusLabel(candidate?.statutContrat || candidate?.statut_contrat || contratLabel)}</strong>
                       </div>
                       <div>
-                        <span>Statut dossier</span>
-                        <strong>{candidate?.statutDossier || candidate?.statut_dossier || "VALIDE"}</strong>
+                        <span>Statut du dossier</span>
+                        <strong>{formatStatusLabel(candidate?.statutDossier || candidate?.statut_dossier || "VALIDE")}</strong>
                       </div>
                       <div>
-                        <span>Date signature</span>
+                        <span>Date de signature</span>
                         <strong>{formatDateTime(candidate?.dateSignature || candidate?.date_signature)}</strong>
                       </div>
                     </div>
                   ) : (
                     <div className="summary-progress-row">
                       <div className="summary-progress-label">
-                        <span>Progression documents</span>
+                        <span>Progression des documents</span>
                         <strong>{progress.doneCount}/{progress.total}</strong>
                       </div>
                       <div className="dossier-progress-track compact">
@@ -493,7 +501,7 @@ export default function ContractOnboardingPanel() {
 
                   <div className={`summary-main-actions ${showValidatedView ? "validated-actions" : ""}`}>
                     <button className="btn-secondary" onClick={() => openCandidateDossier(candidate.id)} type="button">
-                      Consulter dossier
+                      Consulter le dossier
                     </button>
                     {!showValidatedView && (
                       <button className="btn-toggle-docs" onClick={() => toggleExpanded(candidate.id)} type="button">
@@ -507,19 +515,19 @@ export default function ContractOnboardingPanel() {
                   <div className="dossier-expand-panel">
                     <div className="expand-status-line">
                       <span>
-                        Contrat: <strong>{contratLabel}</strong>
+                        Contrat : <strong>{contratLabel}</strong>
                       </span>
                       <span>
-                        Type contrat: <strong>{typeContrat}</strong>
+                        Type de contrat : <strong>{typeContrat}</strong>
                       </span>
                       <span>
-                        Dossier: <strong>{dossierLabel}</strong>
+                        Dossier : <strong>{dossierLabel}</strong>
                       </span>
                       <span>
-                        Signature: <strong>{formatDateTime(candidate?.dateSignature || candidate?.date_signature)}</strong>
+                        Date de signature : <strong>{formatDateTime(candidate?.dateSignature || candidate?.date_signature)}</strong>
                       </span>
                       <label>
-                        Situation familiale:
+                        Situation familiale :
                         <select
                           className="sign-lieu-select"
                           value={maritalStatusValue}
@@ -530,8 +538,8 @@ export default function ContractOnboardingPanel() {
                             }))
                           }
                         >
-                          <option value="non_marie">Situation familiale: Non marie</option>
-                          <option value="marie">Situation familiale: Marie</option>
+                          <option value="non_marie">Situation familiale : Non marié</option>
+                          <option value="marie">Situation familiale : Marié</option>
                         </select>
                       </label>
                     </div>
@@ -562,7 +570,7 @@ export default function ContractOnboardingPanel() {
                                   <td>{doc.document}</td>
                                   <td>
                                     <span className={`doc-status ${received ? "ok" : "missing"}`}>
-                                      {received ? "Recu" : "Manquant"}
+                                      {received ? "Reçu" : "Manquant"}
                                     </span>
                                   </td>
                                   <td>
@@ -574,7 +582,7 @@ export default function ContractOnboardingPanel() {
                                       disabled={isSavingDocument}
                                       type="button"
                                     >
-                                      {received ? "Marquer manquant" : "Marquer recu"}
+                                      {received ? "Marquer manquant" : "Marquer reçu"}
                                     </button>
                                   </td>
                                 </tr>
@@ -597,10 +605,10 @@ export default function ContractOnboardingPanel() {
                           onChange={(event) => void handleTypeContratChange(candidate, event.target.value)}
                           disabled={workflow.contratSigne || isSavingType}
                         >
-                          <option value="">Type contrat</option>
+                          <option value="">Type de contrat</option>
                           {TYPE_CONTRAT_OPTIONS.map((option) => (
                             <option key={`${candidate.id}-${option}`} value={option}>
-                              Type: {option}
+                              Type de contrat : {option}
                             </option>
                           ))}
                         </select>
@@ -611,7 +619,7 @@ export default function ContractOnboardingPanel() {
                           type="button"
                           title={!canSignContract ? "Veuillez sélectionner le type de contrat avant de signer." : ""}
                         >
-                          {workflow.contratSigne ? "Contrat signe" : "Signer le contrat"}
+                          {workflow.contratSigne ? "Contrat signé" : "Signer le contrat"}
                         </button>
                       </div>
 
@@ -627,7 +635,7 @@ export default function ContractOnboardingPanel() {
                         disabled={workflow.dossierValide || !progress.isComplete}
                         type="button"
                       >
-                        {workflow.dossierValide ? "Dossier valide" : "Valider dossier"}
+                        {workflow.dossierValide ? "Dossier validé" : "Valider dossier"}
                       </button>
                     </div>
                   </div>
