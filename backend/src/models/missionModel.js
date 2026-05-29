@@ -1,5 +1,6 @@
 const sql = require("mssql");
 const config = require("../../config");
+const notificationModel = require("./notificationModel");
 
 function normalizeText(value) {
     if (value === undefined || value === null) return "";
@@ -325,6 +326,69 @@ function normalizeMissionInput(data = {}) {
     };
 }
 
+async function getMissionResponsablesIds(transaction, missionId) {
+    const normalizedMissionId = normalizePositiveInt(missionId);
+    if (!normalizedMissionId) return [];
+
+    const result = await transaction.request()
+        .input("MissionId", sql.Int, normalizedMissionId)
+        .query(`
+            SELECT UtilisateurId
+            FROM dbo.MissionResponsables
+            WHERE MissionId = @MissionId;
+        `);
+
+    return (result.recordset || [])
+        .map((row) => normalizePositiveInt(row?.UtilisateurId))
+        .filter(Boolean);
+}
+
+async function getMissionNotificationSummary(transaction, missionId) {
+    const normalizedMissionId = normalizePositiveInt(missionId);
+    if (!normalizedMissionId) return null;
+
+    const result = await transaction.request()
+        .input("MissionId", sql.Int, normalizedMissionId)
+        .query(`
+            SELECT TOP 1
+                Id,
+                CodeMission,
+                CONVERT(VARCHAR(10), DateMission, 23) AS DateMission,
+                Gouvernorat,
+                Delegation
+            FROM dbo.Missions
+            WHERE Id = @MissionId;
+        `);
+
+    const row = result.recordset?.[0];
+    if (!row) return null;
+
+    return {
+        Id: normalizePositiveInt(row?.Id),
+        CodeMission: normalizeText(row?.CodeMission),
+        DateMission: toIsoDate(row?.DateMission),
+        Gouvernorat: normalizeText(row?.Gouvernorat),
+        Delegation: normalizeText(row?.Delegation),
+    };
+}
+
+async function createMissionNotificationsForResponsables(transaction, mission, responsablesIds) {
+    const ids = normalizeResponsablesIds(responsablesIds);
+    if (!mission?.Id || ids.length === 0) return;
+
+    const message = notificationModel.buildMissionNotificationMessage(mission);
+    if (!message) return;
+
+    for (const utilisateurId of ids) {
+        await notificationModel.createMissionNotificationWithRequest(
+            transaction.request(),
+            utilisateurId,
+            mission.Id,
+            message
+        );
+    }
+}
+
 async function insertMissionResponsables(transaction, missionId, responsablesIds) {
     const ids = normalizeResponsablesIds(responsablesIds);
 
@@ -581,6 +645,12 @@ async function createMission(data) {
         }
 
         await insertMissionResponsables(transaction, missionId, missionData.responsablesIds);
+        const missionSummary = await getMissionNotificationSummary(transaction, missionId);
+        await createMissionNotificationsForResponsables(
+            transaction,
+            missionSummary,
+            missionData.responsablesIds
+        );
         await transaction.commit();
 
         return getMissionById(missionId);
@@ -643,6 +713,8 @@ async function updateMission(id, data) {
             return null;
         }
 
+        const previousResponsablesIds = await getMissionResponsablesIds(transaction, missionId);
+
         await transaction.request()
             .input("MissionId", sql.Int, missionId)
             .query(`
@@ -651,6 +723,15 @@ async function updateMission(id, data) {
             `);
 
         await insertMissionResponsables(transaction, missionId, missionData.responsablesIds);
+        const newResponsablesIds = missionData.responsablesIds.filter(
+            (utilisateurId) => !previousResponsablesIds.includes(utilisateurId)
+        );
+        const missionSummary = await getMissionNotificationSummary(transaction, missionId);
+        await createMissionNotificationsForResponsables(
+            transaction,
+            missionSummary,
+            newResponsablesIds
+        );
         await transaction.commit();
 
         return getMissionById(missionId);

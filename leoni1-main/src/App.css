@@ -35,9 +35,36 @@ body {
   font-size: 14px;
 }
 
-.app-layout { display: flex; min-height: 100vh; }
-.app-main   { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.app-content { flex: 1; padding: 28px 32px; overflow-y: auto; }
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.app-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-content {
+  flex: 1;
+  min-height: 0;
+  padding: 28px 32px;
+  overflow-y: auto;
+}
 
 button { cursor: pointer; font-family: inherit; }
 input, select { font-family: inherit; }

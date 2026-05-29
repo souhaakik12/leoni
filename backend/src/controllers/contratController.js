@@ -39,6 +39,22 @@ exports.getContrats = async (req, res) => {
     }
 };
 
+exports.getHistoriqueRenouvellementsContrat = async (req, res) => {
+    try {
+        const renouvellements = await contratModel.getHistoriqueRenouvellementsContrat(
+            req.params.id,
+            req.query?.source_donnee
+        );
+
+        return res.json({
+            ok: true,
+            renouvellements,
+        });
+    } catch (error) {
+        return handleError(res, error, "Impossible de charger l'historique des renouvellements.");
+    }
+};
+
 exports.renouvelerContrat = async (req, res) => {
     try {
         const actionUser = readActionUser(req.body, req.user);

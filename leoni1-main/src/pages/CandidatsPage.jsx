@@ -127,14 +127,14 @@ const niveauOptions = [
   "CAP",
   "Ingénieur",
   "Licence",
-  "Master",
-  "Non renseigné",
-  "Sans diplôme",
+  "Master", 
   "Technicien supérieur",
 ];
 const MAX_CIN_LENGTH = 8;
 const MAX_PHONE_LENGTH = 8;
 const MAX_AGE_LENGTH = 2;
+const MIN_CANDIDATE_AGE = 18;
+const MIN_CANDIDATE_AGE_MESSAGE = "L\u2019\u00e2ge du candidat doit \u00eatre sup\u00e9rieur ou \u00e9gal \u00e0 18 ans.";
 const DEFAULT_VISIBLE_MOVEMENTS = 10;
 const MOVEMENT_FILTERS = [
   { id: "all", label: "Tous", step: "" },
@@ -255,7 +255,7 @@ function isValidGenre(value) {
 }
 
 function validateCandidateFields(values, options = {}) {
-  const { requireGenre = false } = options;
+  const { requireGenre = false, minimumAge = 1 } = options;
   const nextErrors = {};
   const trimmedNom = values.nom.trim();
   const trimmedCin = values.cin.trim();
@@ -286,6 +286,8 @@ function validateCandidateFields(values, options = {}) {
     nextErrors.age = "L'age est obligatoire.";
   } else if (!/^\d+$/.test(trimmedAge) || Number(trimmedAge) <= 0) {
     nextErrors.age = "L'age doit etre un nombre valide.";
+  } else if (Number(trimmedAge) < minimumAge) {
+    nextErrors.age = MIN_CANDIDATE_AGE_MESSAGE;
   }
 
   if (requireGenre && !trimmedGenre) {
@@ -760,7 +762,7 @@ export default function CandidatsPage() {
       niveauScolaire,
       poste,
       adresse,
-    }, { requireGenre: true });
+    }, { requireGenre: true, minimumAge: MIN_CANDIDATE_AGE });
     setErrors(nextErrors);
     const isValid = Object.keys(nextErrors).length === 0;
     setSubmissionMessage(isValid ? "" : "Veuillez corriger les champs obligatoires avant d'ajouter le candidat.");

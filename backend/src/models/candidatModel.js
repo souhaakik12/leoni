@@ -12,6 +12,10 @@ const TYPE_CANDIDATURE = "NOUVEAU";
 const CONTRACT_TYPES_SIX_MONTHS = new Set(["CDI", "2CDI", "CDI SANS ESSAI", "CDD"]);
 const CONTRACT_TYPES_TWELVE_MONTHS = new Set(["CAIP", "CIVP", "SIVP"]);
 const DOSSIER_ALLOWED_ETAPES = new Set(["DOSSIER_CONTRAT", "CONTRAT_A_SIGNER"]);
+const SUIVI_CONTRAT_ALLOWED_STATUSES = new Set([
+    "EN_COURS",
+    "ABANDONNE",
+]);
 
 class CandidatContractError extends Error {
     constructor(message, status = 500) {
@@ -87,6 +91,11 @@ function isMarriedStatus(value) {
 
 function normalizeWorkflowStep(value) {
     return String(value ?? "").trim().toUpperCase();
+}
+
+function normalizeSuiviContratStatus(value) {
+    const normalized = String(value ?? "").trim().toUpperCase();
+    return SUIVI_CONTRAT_ALLOWED_STATUSES.has(normalized) ? normalized : "";
 }
 
 function resolveMovementActor(user) {
@@ -657,6 +666,12 @@ async function signerContratCandidat(candidatId, typeContrat, actionUser = null)
         const finalise = dossierValide;
         const nextEtape = finalise ? "NOUVEAU_RECRUTE" : candidat.etape;
         const nextStatut = finalise ? "CONTRAT_FINALISE" : candidat.statut;
+        const suiviSetClause = finalise
+            ? `,
+                    statut_suivi_contrat = NULL,
+                    motif_suivi_contrat = NULL,
+                    date_suivi_contrat = NULL`
+            : "";
 
         const candidatUpdateResult = await transaction.request()
             .input("id", sql.Int, normalizedCandidateId)
@@ -673,6 +688,7 @@ async function signerContratCandidat(candidatId, typeContrat, actionUser = null)
                     statut_contrat = @statut_contrat,
                     etape = @etape,
                     statut = @statut
+                    ${suiviSetClause}
                 OUTPUT
                     INSERTED.id,
                     INSERTED.contrat_signe,
@@ -858,6 +874,11 @@ async function validerDossierContrat(candidatId, actionUser = null) {
         if (finalise && hasStatut) {
             setClauses.push("statut = 'CONTRAT_FINALISE'");
         }
+        if (finalise) {
+            setClauses.push("statut_suivi_contrat = NULL");
+            setClauses.push("motif_suivi_contrat = NULL");
+            setClauses.push("date_suivi_contrat = NULL");
+        }
 
         const updateResult = await transaction.request()
             .input("id", sql.Int, normalizedCandidateId)
@@ -923,6 +944,108 @@ async function validerDossierContrat(candidatId, actionUser = null) {
     }
 }
 
+async function updateSuiviContrat(candidatId, statutSuiviContrat, motifSuiviContrat = "", actionUser = null) {
+    const normalizedCandidateId = Number(candidatId);
+    const normalizedStatus = normalizeSuiviContratStatus(statutSuiviContrat);
+    const trimmedMotif = String(motifSuiviContrat ?? "").trim();
+
+    if (!Number.isInteger(normalizedCandidateId) || normalizedCandidateId <= 0) {
+        throw new CandidatContractError("Identifiant candidat invalide.", 400);
+    }
+
+    if (!normalizedStatus) {
+        throw new CandidatContractError("Statut de suivi contrat invalide.", 400);
+    }
+
+    const pool = await sql.connect(config);
+    const transaction = new sql.Transaction(pool);
+    const actor = resolveContractActionActor(actionUser);
+
+    try {
+        await transaction.begin();
+
+        const candidatResult = await transaction.request()
+            .input("id", sql.Int, normalizedCandidateId)
+            .query(`
+                SELECT TOP 1
+                    id,
+                    nom,
+                    cin,
+                    etape
+                FROM dbo.candidats
+                WHERE id = @id;
+            `);
+
+        const candidat = candidatResult.recordset?.[0] || null;
+        if (!candidat) {
+            throw new CandidatContractError("Candidat introuvable.", 404);
+        }
+
+        const updateResult = await transaction.request()
+            .input("id", sql.Int, normalizedCandidateId)
+            .input("statut_suivi_contrat", sql.NVarChar(50), normalizedStatus)
+            .input("motif_suivi_contrat", sql.NVarChar(255), trimmedMotif || null)
+            .query(`
+                UPDATE dbo.candidats
+                SET statut_suivi_contrat = @statut_suivi_contrat,
+                    motif_suivi_contrat = @motif_suivi_contrat,
+                    date_suivi_contrat = GETDATE()
+                OUTPUT
+                    INSERTED.id,
+                    INSERTED.statut_suivi_contrat,
+                    INSERTED.motif_suivi_contrat,
+                    INSERTED.date_suivi_contrat
+                WHERE id = @id;
+            `);
+
+        const updatedCandidat = updateResult.recordset?.[0] || null;
+        if (!updatedCandidat) {
+            throw new CandidatContractError("Mise à jour du suivi contrat impossible.", 500);
+        }
+
+        const contractLinkResult = await transaction.request()
+            .input("candidat_id", sql.Int, normalizedCandidateId)
+            .query(`
+                SELECT TOP 1
+                    id
+                FROM dbo.contrats
+                WHERE candidat_id = @candidat_id
+                ORDER BY id DESC;
+            `);
+
+        await enregistrerActionContrat(transaction, {
+            id_contrat: contractLinkResult.recordset?.[0]?.id || null,
+            source_donnee: contractLinkResult.recordset?.[0]?.id ? "SYSTEME" : null,
+            candidat_id: normalizedCandidateId,
+            cin: candidat.cin || null,
+            nom_prenom: candidat.nom || null,
+            action_type: "SUIVI_CONTRAT",
+            action_description: trimmedMotif
+                ? `${normalizedStatus} - ${trimmedMotif}`
+                : normalizedStatus,
+            ...actor,
+        });
+
+        await transaction.commit();
+
+        return {
+            candidat_id: normalizedCandidateId,
+            statut_suivi_contrat: updatedCandidat.statut_suivi_contrat || normalizedStatus,
+            motif_suivi_contrat: updatedCandidat.motif_suivi_contrat || "",
+            date_suivi_contrat: updatedCandidat.date_suivi_contrat || null,
+        };
+    } catch (error) {
+        try {
+            if (!transaction._aborted) {
+                await transaction.rollback();
+            }
+        } catch (rollbackError) {
+            console.error("Rollback updateSuiviContrat:", rollbackError);
+        }
+        throw error;
+    }
+}
+
 module.exports = {
     createCandidat,
     updateCandidat,
@@ -933,6 +1056,7 @@ module.exports = {
     findCandidatByCinExceptId,
     signerContratCandidat,
     validerDossierContrat,
+    updateSuiviContrat,
     CandidatContractError,
     CANAL_CANDIDAT,
     ETAPE_CANDIDAT,

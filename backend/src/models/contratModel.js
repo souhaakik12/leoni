@@ -106,6 +106,12 @@ function buildListeContratsQuery(request, search) {
             jours_restants_affichage,
             alerte,
             traite_par,
+            (
+                SELECT COUNT(*)
+                FROM dbo.contrats_renouvellements r
+                WHERE r.id_contrat = TRY_CAST(v.id_contrat AS INT)
+                  AND r.source_donnee = v.source_donnee
+            ) AS renouvellements_count,
             source_donnee
         FROM dbo.vw_contrats_interface v
         ${whereClause}
@@ -137,6 +143,56 @@ async function getContratsFront({ search }) {
         contrats: result.recordset || [],
         total: Number(countResult.recordset?.[0]?.total || 0),
     };
+}
+
+async function getHistoriqueRenouvellementsContrat(idContrat, sourceDonnee) {
+    const normalizedId = Number(idContrat);
+    const normalizedSource = normalizeSourceDonnee(sourceDonnee);
+
+    if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
+        throw new ContratError("Identifiant contrat invalide.", 400);
+    }
+
+    if (!normalizedSource) {
+        throw new ContratError("Source du contrat manquante ou invalide.", 400);
+    }
+
+    const pool = await sql.connect(config);
+    const result = await pool.request()
+        .input("idContrat", sql.Int, normalizedId)
+        .input("sourceDonnee", sql.VarChar(20), normalizedSource)
+        .query(`
+            SELECT
+                r.id,
+                r.id_contrat,
+                r.source_donnee,
+                r.cin,
+                r.nom_prenom,
+                r.type_contrat,
+                r.ancienne_date_debut,
+                r.ancienne_date_fin,
+                r.nouvelle_date_debut,
+                r.nouvelle_date_fin,
+                r.date_renouvellement,
+                action_trace.utilisateur_nom
+            FROM dbo.contrats_renouvellements r
+            OUTER APPLY (
+                SELECT TOP 1
+                    ca.utilisateur_nom
+                FROM dbo.contrats_actions ca
+                WHERE ca.id_contrat = r.id_contrat
+                  AND ca.source_donnee = r.source_donnee
+                  AND ca.action_type = 'RENOUVELLEMENT_CONTRAT'
+                ORDER BY
+                    ABS(DATEDIFF(SECOND, ca.date_action, r.date_renouvellement)),
+                    ca.date_action DESC
+            ) action_trace
+            WHERE r.id_contrat = @idContrat
+              AND r.source_donnee = @sourceDonnee
+            ORDER BY r.date_renouvellement DESC;
+        `);
+
+    return result.recordset || [];
 }
 
 async function renouvelerContrat(idContrat, sourceDonnee, actionUser = null) {
@@ -317,5 +373,6 @@ async function renouvelerContrat(idContrat, sourceDonnee, actionUser = null) {
 module.exports = {
     ContratError,
     getContratsFront,
+    getHistoriqueRenouvellementsContrat,
     renouvelerContrat,
 };

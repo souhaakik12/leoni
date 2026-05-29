@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { useAuth } from "./AuthContext.jsx";
+import { useNotifications } from "./NotificationsContext.jsx";
 import { buildRoleHeaders } from "../utils/roles.js";
 
 const API_BASE_URL = "http://localhost:3000/api/missions";
@@ -230,6 +231,7 @@ function resolveMissionDatabaseId(value, missions) {
 
 export function MissionsProvider({ children }) {
   const { user } = useAuth();
+  const { refreshNotifications } = useNotifications();
   const [missions, setMissions] = useState([]);
   const [responsables, setResponsables] = useState([]);
   const [loadingMissions, setLoadingMissions] = useState(false);
@@ -308,6 +310,7 @@ export function MissionsProvider({ children }) {
 
     const mission = normalizeMission(data?.mission || data);
     setMissions((prev) => sortMissions([...prev.filter((item) => item.Id !== mission.Id), mission]));
+    refreshNotifications().catch(() => {});
     return mission;
   };
 
@@ -333,6 +336,7 @@ export function MissionsProvider({ children }) {
 
     const mission = normalizeMission(data?.mission || data);
     setMissions((prev) => sortMissions(prev.map((item) => (item.Id === mission.Id ? mission : item))));
+    refreshNotifications().catch(() => {});
     return mission;
   };
 

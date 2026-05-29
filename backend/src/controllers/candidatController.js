@@ -2,6 +2,12 @@ const sql = require("mssql");
 const config = require("../../config");
 const candidatModel = require("../models/candidatModel");
 const ALLOWED_GENRES = ["Femme", "Homme"];
+const ALLOWED_SUIVI_CONTRAT_STATUSES = new Set([
+    "EN_COURS",
+    "ABANDONNE",
+]);
+const MIN_CANDIDATE_AGE = 18;
+const MIN_CANDIDATE_AGE_MESSAGE = "L\u2019\u00e2ge du candidat doit \u00eatre sup\u00e9rieur ou \u00e9gal \u00e0 18 ans.";
 function readTrimmed(body, ...keys) {
     for (const key of keys) {
         const value = body?.[key];
@@ -57,7 +63,10 @@ exports.listerCandidats = async (_req, res) => {
                 CASE WHEN COL_LENGTH('dbo.candidats', 'type_contrat') IS NULL THEN 0 ELSE 1 END AS has_type_contrat,
                 CASE WHEN COL_LENGTH('dbo.candidats', 'statut_contrat') IS NULL THEN 0 ELSE 1 END AS has_statut_contrat,
                 CASE WHEN COL_LENGTH('dbo.candidats', 'statut_dossier') IS NULL THEN 0 ELSE 1 END AS has_statut_dossier,
-                CASE WHEN COL_LENGTH('dbo.candidats', 'situation_familiale') IS NULL THEN 0 ELSE 1 END AS has_situation_familiale;
+                CASE WHEN COL_LENGTH('dbo.candidats', 'situation_familiale') IS NULL THEN 0 ELSE 1 END AS has_situation_familiale,
+                CASE WHEN COL_LENGTH('dbo.candidats', 'statut_suivi_contrat') IS NULL THEN 0 ELSE 1 END AS has_statut_suivi_contrat,
+                CASE WHEN COL_LENGTH('dbo.candidats', 'motif_suivi_contrat') IS NULL THEN 0 ELSE 1 END AS has_motif_suivi_contrat,
+                CASE WHEN COL_LENGTH('dbo.candidats', 'date_suivi_contrat') IS NULL THEN 0 ELSE 1 END AS has_date_suivi_contrat;
         `);
 
         const metadata = meta.recordset?.[0] || {};
@@ -88,6 +97,9 @@ exports.listerCandidats = async (_req, res) => {
                 ${metadata.has_statut_contrat ? "statut_contrat" : "CAST(NULL AS VARCHAR(30)) AS statut_contrat"},
                 ${metadata.has_statut_dossier ? "statut_dossier" : "CAST(NULL AS VARCHAR(30)) AS statut_dossier"},
                 ${metadata.has_situation_familiale ? "situation_familiale" : "CAST(NULL AS VARCHAR(50)) AS situation_familiale"},
+                ${Boolean(metadata.has_statut_suivi_contrat) ? "statut_suivi_contrat" : "CAST(NULL AS VARCHAR(50)) AS statut_suivi_contrat"},
+                ${Boolean(metadata.has_motif_suivi_contrat) ? "motif_suivi_contrat" : "CAST(NULL AS VARCHAR(255)) AS motif_suivi_contrat"},
+                ${Boolean(metadata.has_date_suivi_contrat) ? "date_suivi_contrat" : "CAST(NULL AS DATETIME) AS date_suivi_contrat"},
                 genre
             FROM dbo.candidats
             ORDER BY id DESC;
@@ -152,7 +164,13 @@ exports.createCandidat = async (req, res) => {
         const adresse = readTrimmed(req.body, "adresse");
         const genre = readTrimmed(req.body, "genre");
 
-        if (!nom || !cin || !telephone || !age || !niveauScolaire || !poste || !adresse) {
+        if (!age) {
+            return res.status(400).json({
+                message: MIN_CANDIDATE_AGE_MESSAGE,
+            });
+        }
+
+        if (!nom || !cin || !telephone || !niveauScolaire || !poste || !adresse) {
             return res.status(400).json({
                 message: "Tous les champs sont obligatoires : nom, cin, telephone, age, niveau_scolaire, poste et adresse.",
             });
@@ -172,9 +190,9 @@ exports.createCandidat = async (req, res) => {
             });
         }
 
-        if (!/^\d+$/.test(age)) {
+        if (!/^\d+$/.test(age) || Number(age) <= 0 || Number(age) < MIN_CANDIDATE_AGE) {
             return res.status(400).json({
-                message: "L'age doit etre numerique.",
+                message: MIN_CANDIDATE_AGE_MESSAGE,
             });
         }
 
@@ -392,6 +410,42 @@ exports.validerDossierContrat = async (req, res) => {
         return res.status(status).json({
             ok: false,
             message: err?.message || "Validation dossier impossible.",
+        });
+    }
+};
+
+exports.updateSuiviContrat = async (req, res) => {
+    try {
+        const candidatId = Number.parseInt(req.params.id, 10);
+        const statutSuiviContrat = readTrimmed(req.body, "statut_suivi_contrat");
+        const motifSuiviContrat = readTrimmed(req.body, "motif_suivi_contrat");
+        const actionUser = readActionUser(req.body, req.user);
+
+        if (!ALLOWED_SUIVI_CONTRAT_STATUSES.has(String(statutSuiviContrat || "").toUpperCase())) {
+            return res.status(400).json({
+                ok: false,
+                message: "Statut de suivi contrat invalide.",
+            });
+        }
+
+        const result = await candidatModel.updateSuiviContrat(
+            candidatId,
+            statutSuiviContrat,
+            motifSuiviContrat,
+            actionUser
+        );
+
+        return res.json({
+            ok: true,
+            message: "Suivi contrat mis à jour.",
+            ...result,
+        });
+    } catch (err) {
+        console.error("Erreur updateSuiviContrat:", err);
+        const status = Number.isInteger(err?.status) ? err.status : 500;
+        return res.status(status).json({
+            ok: false,
+            message: err?.message || "Mise à jour du suivi contrat impossible.",
         });
     }
 };

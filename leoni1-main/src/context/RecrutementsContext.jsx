@@ -241,6 +241,12 @@ function normalizeCandidateContractFields(candidate) {
   next.statut_dossier = next.statutDossier;
   next.statutContrat = next.statutContrat || next.statut_contrat || "";
   next.statut_contrat = next.statutContrat;
+  next.statutSuiviContrat = next.statutSuiviContrat || next.statut_suivi_contrat || "";
+  next.statut_suivi_contrat = next.statutSuiviContrat;
+  next.motifSuiviContrat = next.motifSuiviContrat || next.motif_suivi_contrat || "";
+  next.motif_suivi_contrat = next.motifSuiviContrat;
+  next.dateSuiviContrat = next.dateSuiviContrat || next.date_suivi_contrat || null;
+  next.date_suivi_contrat = next.dateSuiviContrat;
   if (typeof next.contratValide !== "boolean") next.contratValide = dossierValide;
   if (!next.documentsContrat || typeof next.documentsContrat !== "object") next.documentsContrat = {};
   const normalizedTypeContrat = normalizeContractType(next.typeContrat || next.type_contrat);
@@ -332,6 +338,9 @@ function mapApiCandidateToLocal(candidate) {
     statutDossier: candidate?.statut_dossier ?? candidate?.statutDossier ?? null,
     type_contrat: candidate?.type_contrat ?? candidate?.typeContrat ?? null,
     statut_contrat: candidate?.statut_contrat ?? candidate?.statutContrat ?? null,
+    statut_suivi_contrat: candidate?.statut_suivi_contrat ?? candidate?.statutSuiviContrat ?? null,
+    motif_suivi_contrat: candidate?.motif_suivi_contrat ?? candidate?.motifSuiviContrat ?? null,
+    date_suivi_contrat: candidate?.date_suivi_contrat ?? candidate?.dateSuiviContrat ?? null,
   });
 }
 
@@ -803,6 +812,60 @@ export function RecrutementsProvider({ children }) {
     }
   };
 
+  const updateSuiviContrat = async (
+    candidatId,
+    { statutSuiviContrat, motifSuiviContrat } = {}
+  ) => {
+    const normalizedCandidateId = Number(candidatId);
+    if (!Number.isInteger(normalizedCandidateId) || normalizedCandidateId <= 0) {
+      return { ok: false, message: "ID candidat invalide." };
+    }
+
+    const normalizedStatus = String(statutSuiviContrat || "").trim().toUpperCase();
+    if (!normalizedStatus) {
+      return { ok: false, message: "Statut de suivi contrat invalide." };
+    }
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/candidats/${normalizedCandidateId}/suivi-contrat`, {
+        method: "PUT",
+        headers: buildRoleHeaders(user, {
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          statut_suivi_contrat: normalizedStatus,
+          motif_suivi_contrat: String(motifSuiviContrat || "").trim(),
+          ...buildActionUserPayload(user),
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        return {
+          ok: false,
+          message: payload?.message || "Mise à jour du suivi contrat impossible.",
+        };
+      }
+
+      await refreshCandidatsFromApi();
+      await refreshSeancesFromApi();
+
+      return {
+        ok: true,
+        message: payload?.message || "Suivi contrat mis à jour.",
+        statutSuiviContrat: payload?.statut_suivi_contrat || normalizedStatus,
+        motifSuiviContrat: payload?.motif_suivi_contrat || "",
+        dateSuiviContrat: payload?.date_suivi_contrat || null,
+      };
+    } catch (error) {
+      console.error("Erreur updateSuiviContrat:", error);
+      return {
+        ok: false,
+        message: error?.message || "Erreur reseau.",
+      };
+    }
+  };
+
   const sendSeanceCandidatesToDossier = async (seanceId) => {
     const normalizedSeanceId = toSeanceId(seanceId);
     if (!normalizedSeanceId) {
@@ -943,6 +1006,7 @@ export function RecrutementsProvider({ children }) {
         sendCandidatToDossier,
         validerDossierContrat,
         signerContratCandidat,
+        updateSuiviContrat,
         sendSeanceCandidatesToDossier,
         setCandidatContratSigne,
         unsetCandidatContratSigne,

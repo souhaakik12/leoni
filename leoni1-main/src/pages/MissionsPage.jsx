@@ -7,7 +7,7 @@ const PLANIFIED_STATUS = "Planifi\u00e9e";
 const IN_PROGRESS_STATUS = "En cours";
 const COMPLETED_STATUS = "Termin\u00e9e";
 
-const transports = ["Bus", "Minibus", "Van", "Voiture de service"];
+const transports = ["Bus", "Minibus","Voiture de service"];
 const statuts = [PLANIFIED_STATUS, IN_PROGRESS_STATUS, COMPLETED_STATUS];
 const statutConfig = {
   [COMPLETED_STATUS]: { bg: "#def4e9", color: "#1f885c" },

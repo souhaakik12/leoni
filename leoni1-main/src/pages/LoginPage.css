@@ -206,38 +206,6 @@
   margin-bottom: 14px;
 }
 
-.demo-label {
-  margin-top: 18px;
-  margin-bottom: 7px;
-  color: #557d9b;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-weight: 700;
-}
-
-.demo-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.demo-row button {
-  border: 1px solid rgba(107, 166, 205, 0.38);
-  border-radius: 8px;
-  background: rgba(240, 249, 255, 0.92);
-  color: #2f6f98;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 7px 10px;
-  cursor: pointer;
-}
-
-.demo-row button:hover {
-  border-color: rgba(64, 137, 185, 0.58);
-  color: #1f5f88;
-}
-
 @media (max-width: 900px) {
   .login-shell {
     grid-template-columns: 1fr;

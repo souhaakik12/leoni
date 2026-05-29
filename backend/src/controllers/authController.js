@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 const utilisateurModel = require("../models/utilisateurModel");
 const { validatePassword } = require("../utils/passwordValidation");
+const { hashPassword, verifyStoredPassword } = require("../utils/passwordSecurity");
 
 const RESET_EXPIRATION_HOURS = 2;
 const GENERIC_FORGOT_PASSWORD_MESSAGE = "Si un compte existe avec cet email, un lien de reinitialisation a ete envoye.";
@@ -110,11 +111,24 @@ exports.login = async (req, res) => {
 
         const utilisateur = await utilisateurModel.findActiveByEmail(email);
 
-        if (!utilisateur || utilisateur.MotDePasse !== password) {
+        if (!utilisateur) {
             return res.status(401).json({
                 success: false,
                 message: "Email ou mot de passe incorrect",
             });
+        }
+
+        const passwordCheck = await verifyStoredPassword(password, utilisateur.MotDePasse);
+        if (!passwordCheck.matches) {
+            return res.status(401).json({
+                success: false,
+                message: "Email ou mot de passe incorrect",
+            });
+        }
+
+        if (passwordCheck.shouldMigrate) {
+            const hashedPassword = await hashPassword(password);
+            await utilisateurModel.updatePasswordById(utilisateur.Id, hashedPassword);
         }
 
         return res.json({
@@ -228,14 +242,16 @@ exports.changePassword = async (req, res) => {
             });
         }
 
-        if (utilisateur.MotDePasse !== currentPassword) {
+        const passwordCheck = await verifyStoredPassword(currentPassword, utilisateur.MotDePasse);
+        if (!passwordCheck.matches) {
             return res.status(401).json({
                 success: false,
                 message: "Mot de passe actuel incorrect.",
             });
         }
 
-        const updatedUser = await utilisateurModel.updatePasswordById(id, newPassword);
+        const hashedPassword = await hashPassword(newPassword);
+        const updatedUser = await utilisateurModel.updatePasswordById(id, hashedPassword);
         if (!updatedUser) {
             return res.status(404).json({
                 success: false,
@@ -361,7 +377,8 @@ exports.resetPassword = async (req, res) => {
             });
         }
 
-        const updatedUser = await utilisateurModel.resetPasswordByToken(token, password);
+        const hashedPassword = await hashPassword(password);
+        const updatedUser = await utilisateurModel.resetPasswordByToken(token, hashedPassword);
         if (!updatedUser) {
             return res.status(400).json({
                 success: false,

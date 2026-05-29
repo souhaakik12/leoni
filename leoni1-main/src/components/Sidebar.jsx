@@ -8,19 +8,14 @@ import {
   hasFoyerAccess,
   hasRole,
 } from "../utils/roles.js";
+import "./Sidebar.css";
 
 const allNavItems = [
   {
-    path: "/",
-    label: "Dashboard",
+    path: "/admin/dashboards",
+    label: "Tableau de bord",
     roles: [ROLE_ADMIN],
     icon: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>,
-  },
-  {
-    path: "/admin/dashboards",
-    label: "Tableaux de bord",
-    roles: [ROLE_ADMIN],
-    icon: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 19V5"/><path d="M10 19V11"/><path d="M16 19V8"/><path d="M22 19V3"/></svg>,
   },
   {
     path: "/missions",
@@ -31,7 +26,7 @@ const allNavItems = [
   {
     path: "/candidats",
     label: "Candidats",
-    roles: [ROLE_ADMIN, ROLE_RECRUTEUR],
+    roles: [ROLE_RECRUTEUR],
     icon: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
   },
   {
@@ -54,7 +49,7 @@ const allNavItems = [
   },
   {
     path: "/contracts/sessions",
-    label: "Séances Contrat",
+    label: "Seances Contrat",
     roles: CONTRACT_ACCESS_ROLES,
     icon: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h8"/><path d="M8 18h5"/></svg>,
   },
@@ -66,7 +61,7 @@ const allNavItems = [
   },
   {
     path: "/employees",
-    label: "Utilisateurs",
+    label: "Equipe interne",
     roles: [ROLE_ADMIN],
     icon: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>,
   },
@@ -80,87 +75,45 @@ export default function Sidebar({ isOpen }) {
   });
 
   return (
-    <aside style={{
-      width: isOpen ? 230 : 60,
-      background: "#fff",
-      borderRight: "1px solid var(--border)",
-      display: "flex", flexDirection: "column",
-      transition: "width 0.3s cubic-bezier(.4,0,.2,1)",
-      overflow: "hidden", flexShrink: 0,
-      minHeight: "100vh",
-      boxShadow: "2px 0 8px rgba(0,0,0,0.04)",
-    }}>
-
-      {/* Logo */}
-      <div style={{ padding: isOpen ? "20px 20px 16px" : "20px 12px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 8, flexShrink: 0, background: "#F5C200", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ fontSize: 14, fontWeight: 900, color: "#000" }}>L</span>
-        </div>
-        {isOpen && (
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: "#1a1d23", letterSpacing: "0.04em" }}>LEONI</div>
-            <div style={{ fontSize: 10, color: "var(--text-muted)" }}>Tunisia · RH System</div>
-          </div>
-        )}
-      </div>
-
-      {/* Nav */}
-      <nav style={{ flex: 1, padding: "12px 10px", display: "flex", flexDirection: "column", gap: 2 }}>
-        {isOpen && (
-          <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", padding: "4px 8px 8px" }}>
-            Navigation
-          </div>
-        )}
-        {navItems.map(item => (
+    <aside className={`app-sidebar ${isOpen ? "is-open" : "is-collapsed"}`}>
+      <nav className="app-sidebar__nav">
+        {isOpen ? <div className="app-sidebar__section-label">Navigation</div> : null}
+        {navItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
             end={item.path === "/" || item.path === "/profile" || item.path === "/contracts"}
-            style={({ isActive }) => ({
-              display: "flex", alignItems: "center", gap: 10,
-              padding: "9px 12px", borderRadius: 8, textDecoration: "none",
-              background: isActive ? "var(--accent-light)" : "transparent",
-              color: isActive ? "var(--accent)" : "var(--text-secondary)",
-              fontWeight: isActive ? 600 : 400, fontSize: 13.5,
-              justifyContent: isOpen ? "flex-start" : "center",
-              transition: "all 0.15s ease",
-            })}
+            className={({ isActive }) =>
+              `app-sidebar__link${isActive ? " is-active" : ""}${isOpen ? "" : " is-collapsed"}`
+            }
           >
-            <span style={{ flexShrink: 0 }}>{item.icon}</span>
-            {isOpen && <span>{item.label}</span>}
+            <span className="app-sidebar__link-icon">{item.icon}</span>
+            {isOpen ? <span className="app-sidebar__link-label">{item.label}</span> : null}
           </NavLink>
         ))}
       </nav>
 
-      {/* User + logout */}
-      <div style={{ borderTop: "1px solid var(--border)", padding: isOpen ? "14px 16px" : "14px 10px" }}>
+      <div className={`app-sidebar__footer${isOpen ? "" : " is-collapsed"}`}>
         {isOpen ? (
           <>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-              <div style={{ width: 34, height: 34, borderRadius: "50%", background: "#2563eb", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
-                {user?.avatar}
-              </div>
-              <div style={{ overflow: "hidden" }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user?.nom}</div>
-                <div style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user?.email}</div>
+            <div className="app-sidebar__user">
+              <div className="app-sidebar__avatar">{user?.avatar}</div>
+              <div className="app-sidebar__user-copy">
+                <div className="app-sidebar__user-name">{user?.nom}</div>
+                <div className="app-sidebar__user-email">{user?.email}</div>
               </div>
             </div>
-            <button onClick={logout} style={{
-              width: "100%", padding: "7px", border: "1px solid var(--border)",
-              borderRadius: 7, background: "#f9fafb", color: "var(--text-secondary)",
-              fontSize: 12, fontWeight: 600,
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 6, cursor: "pointer",
-            }}>
+            <button onClick={logout} className="app-sidebar__logout">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                 <polyline points="16 17 21 12 16 7"/>
                 <line x1="21" y1="12" x2="9" y2="12"/>
               </svg>
-              Déconnexion
+              Deconnexion
             </button>
           </>
         ) : (
-          <button onClick={logout} title="Déconnexion" style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", display: "flex", justifyContent: "center", width: "100%" }}>
+          <button onClick={logout} title="Deconnexion" className="app-sidebar__logout app-sidebar__logout--icon">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
               <polyline points="16 17 21 12 16 7"/>

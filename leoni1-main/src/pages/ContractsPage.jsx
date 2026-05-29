@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { buildRoleHeaders } from "../utils/roles.js";
 import "./ContractsPage.css";
@@ -124,8 +124,25 @@ function mapContractRow(contract, index) {
       contract.jours_restants_affichage ?? contract.joursRestantsAffichage ?? "",
     alerte: contract.alerte ?? "",
     traitePar: contract.traite_par ?? contract.traitePar ?? "-",
+    renouvellementsCount: Number(contract.renouvellements_count ?? contract.renouvellementsCount ?? 0) || 0,
     sourceDonnee: contract.source_donnee ?? contract.sourceDonnee ?? "",
   };
+}
+
+function mapRenewalHistoryRow(item) {
+  return {
+    id: item.id ?? `${item.id_contrat}-${item.date_renouvellement}`,
+    ancienneDateDebut: item.ancienne_date_debut ?? item.ancienneDateDebut ?? null,
+    ancienneDateFin: item.ancienne_date_fin ?? item.ancienneDateFin ?? null,
+    nouvelleDateDebut: item.nouvelle_date_debut ?? item.nouvelleDateDebut ?? null,
+    nouvelleDateFin: item.nouvelle_date_fin ?? item.nouvelleDateFin ?? null,
+    dateRenouvellement: item.date_renouvellement ?? item.dateRenouvellement ?? null,
+    utilisateurNom: item.utilisateur_nom ?? item.utilisateurNom ?? "-",
+  };
+}
+
+function getHistoryKey(contract) {
+  return `${contract?.idContrat ?? contract?.id ?? "unknown"}:${contract?.sourceDonnee ?? ""}`;
 }
 
 function deriveContractStatus(contract) {
@@ -356,9 +373,27 @@ function canRenewContract(contract) {
   return normalizedAlert === "expire" || normalizedAlert === "proche expiration";
 }
 
-function ActionMenu({ alertMode = false, disabled = false, loading = false, onRenew }) {
+function ActionMenu({
+  alertMode = false,
+  disabled = false,
+  loading = false,
+  historyLoading = false,
+  showHistory = false,
+  onRenew,
+  onHistory,
+}) {
   return (
     <div className={`contracts-table__actions ${alertMode ? "is-alerts" : ""}`.trim()}>
+      {showHistory ? (
+        <button
+          type="button"
+          className="contracts-action contracts-action--inline-secondary"
+          onClick={onHistory}
+          disabled={historyLoading}
+        >
+          {historyLoading ? "Chargement..." : "Historique"}
+        </button>
+      ) : null}
       <button
         type="button"
         className={`contracts-action ${
@@ -385,6 +420,10 @@ export default function ContractsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [renewingContractId, setRenewingContractId] = useState(null);
+  const [historyOpenKey, setHistoryOpenKey] = useState("");
+  const [historyLoadingKey, setHistoryLoadingKey] = useState("");
+  const [historyErrorByKey, setHistoryErrorByKey] = useState({});
+  const [historyByKey, setHistoryByKey] = useState({});
   const [reloadKey, setReloadKey] = useState(0);
 
   const normalizedSearch = search.trim();
@@ -536,6 +575,129 @@ export default function ContractsPage() {
     }
   };
 
+  const handleToggleHistory = async (contract) => {
+    const historyKey = getHistoryKey(contract);
+    if (!contract?.idContrat || !contract?.sourceDonnee) {
+      window.alert("Impossible de charger l'historique : identifiant ou source du contrat manquant.");
+      return;
+    }
+
+    if (historyOpenKey === historyKey) {
+      setHistoryOpenKey("");
+      return;
+    }
+
+    setHistoryOpenKey(historyKey);
+    if (historyByKey[historyKey] || historyLoadingKey === historyKey) {
+      return;
+    }
+
+    setHistoryLoadingKey(historyKey);
+    setHistoryErrorByKey((prev) => {
+      const next = { ...prev };
+      delete next[historyKey];
+      return next;
+    });
+
+    try {
+      const params = new URLSearchParams({
+        source_donnee: contract.sourceDonnee,
+      });
+      const response = await fetch(
+        `${CONTRACTS_API_ENDPOINT}/${contract.idContrat}/renouvellements?${params.toString()}`,
+        {
+          headers: buildRoleHeaders(user, {
+            "Content-Type": "application/json",
+          }),
+        }
+      );
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.message || "Impossible de charger l'historique des renouvellements.");
+      }
+
+      const renouvellements = Array.isArray(payload?.renouvellements)
+        ? payload.renouvellements.map(mapRenewalHistoryRow)
+        : [];
+
+      setHistoryByKey((prev) => ({
+        ...prev,
+        [historyKey]: renouvellements,
+      }));
+    } catch (historyError) {
+      console.error("Erreur chargement historique renouvellement:", historyError);
+      setHistoryErrorByKey((prev) => ({
+        ...prev,
+        [historyKey]:
+          historyError?.message || "Impossible de charger l'historique des renouvellements.",
+      }));
+    } finally {
+      setHistoryLoadingKey((current) => (current === historyKey ? "" : current));
+    }
+  };
+
+  const renderHistoryRow = (contract, columnSpan) => {
+    const historyKey = getHistoryKey(contract);
+    if (historyOpenKey !== historyKey) return null;
+
+    const historyItems = Array.isArray(historyByKey[historyKey]) ? historyByKey[historyKey] : [];
+    const historyError = historyErrorByKey[historyKey] || "";
+    const isHistoryLoading = historyLoadingKey === historyKey;
+
+    return (
+      <tr className="contracts-history-row" key={`${contract.id}-history`}>
+        <td colSpan={columnSpan}>
+          <div className="contracts-history-panel">
+            <div className="contracts-history-panel__header">
+              <div>
+                <h5>Historique des renouvellements</h5>
+                <p>Suivi des anciennes et nouvelles périodes pour ce contrat.</p>
+              </div>
+            </div>
+
+            {isHistoryLoading ? (
+              <div className="contracts-history-panel__empty">Chargement de l'historique...</div>
+            ) : historyError ? (
+              <div className="contracts-history-panel__empty">{historyError}</div>
+            ) : historyItems.length > 0 ? (
+              <div className="contracts-history-list">
+                {historyItems.map((historyItem) => (
+                  <article key={historyItem.id} className="contracts-history-item">
+                    <div className="contracts-history-item__period">
+                      <span>Ancienne période</span>
+                      <strong>
+                        {formatDate(historyItem.ancienneDateDebut)} → {formatDate(historyItem.ancienneDateFin)}
+                      </strong>
+                    </div>
+                    <div className="contracts-history-item__period">
+                      <span>Nouvelle période</span>
+                      <strong>
+                        {formatDate(historyItem.nouvelleDateDebut)} → {formatDate(historyItem.nouvelleDateFin)}
+                      </strong>
+                    </div>
+                    <div className="contracts-history-item__meta">
+                      <span>Renouvelé par</span>
+                      <strong>{historyItem.utilisateurNom || "-"}</strong>
+                    </div>
+                    <div className="contracts-history-item__meta">
+                      <span>Date de renouvellement</span>
+                      <strong>{formatDate(historyItem.dateRenouvellement)}</strong>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="contracts-history-panel__empty">
+                Aucun renouvellement enregistré pour ce contrat.
+              </div>
+            )}
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
   return (
     <div className="contracts-page">
       <section className="contracts-shell">
@@ -659,40 +821,49 @@ export default function ContractsPage() {
                     </td>
                   </tr>
                 ) : paginatedContracts.length > 0 ? (
-                  paginatedContracts.map((contract) => (
-                    <tr key={contract.id}>
-                      <td className="contracts-table__cell--mono">{contract.cin || "-"}</td>
-                      <td className="contracts-table__cell--strong">{contract.nomPrenom || "-"}</td>
-                      <td className="contracts-table__cell--muted">{contract.genre || "-"}</td>
-                      <td className="contracts-table__cell--wrap">{contract.fonction || "-"}</td>
-                      <td className="contracts-table__cell--muted">{contract.segment || "-"}</td>
-                      <td className="contracts-table__cell--wrap">{contract.projet || "-"}</td>
-                      <td className="contracts-table__cell--muted">{contract.site || "-"}</td>
-                      <td>
-                        <TypeBadge value={contract.typeContrat} />
-                      </td>
-                      <td className="contracts-table__cell--date">{formatDate(contract.dateSignature)}</td>
-                      <td className="contracts-table__cell--date">{formatDate(contract.dateDebutContrat)}</td>
-                      <td className="contracts-table__cell--date">{formatDate(contract.dateFinContrat)}</td>
-                      <td>
-                        <ContractStatusBadge contract={contract} />
-                      </td>
-                      <td>
-                        <span className={getDaysClassName(contract)}>{formatDaysRemaining(contract)}</span>
-                      </td>
-                      <td>
-                        <AlertBadge contract={contract} />
-                      </td>
-                      <td className="contracts-table__cell--muted">{contract.traitePar || "-"}</td>
-                      <td>
-                        <ActionMenu
-                          disabled={!canRenewContract(contract)}
-                          loading={renewingContractId === contract.id}
-                          onRenew={() => void handleRenewContract(contract)}
-                        />
-                      </td>
-                    </tr>
-                  ))
+                  paginatedContracts.map((contract) => {
+                    const historyKey = getHistoryKey(contract);
+                    return (
+                      <Fragment key={contract.id}>
+                        <tr>
+                          <td className="contracts-table__cell--mono">{contract.cin || "-"}</td>
+                          <td className="contracts-table__cell--strong">{contract.nomPrenom || "-"}</td>
+                          <td className="contracts-table__cell--muted">{contract.genre || "-"}</td>
+                          <td className="contracts-table__cell--wrap">{contract.fonction || "-"}</td>
+                          <td className="contracts-table__cell--muted">{contract.segment || "-"}</td>
+                          <td className="contracts-table__cell--wrap">{contract.projet || "-"}</td>
+                          <td className="contracts-table__cell--muted">{contract.site || "-"}</td>
+                          <td>
+                            <TypeBadge value={contract.typeContrat} />
+                          </td>
+                          <td className="contracts-table__cell--date">{formatDate(contract.dateSignature)}</td>
+                          <td className="contracts-table__cell--date">{formatDate(contract.dateDebutContrat)}</td>
+                          <td className="contracts-table__cell--date">{formatDate(contract.dateFinContrat)}</td>
+                          <td>
+                            <ContractStatusBadge contract={contract} />
+                          </td>
+                          <td>
+                            <span className={getDaysClassName(contract)}>{formatDaysRemaining(contract)}</span>
+                          </td>
+                          <td>
+                            <AlertBadge contract={contract} />
+                          </td>
+                          <td className="contracts-table__cell--muted">{contract.traitePar || "-"}</td>
+                          <td>
+                            <ActionMenu
+                              disabled={!canRenewContract(contract)}
+                              loading={renewingContractId === contract.id}
+                              historyLoading={historyLoadingKey === historyKey}
+                              showHistory={contract.renouvellementsCount > 0}
+                              onHistory={() => void handleToggleHistory(contract)}
+                              onRenew={() => void handleRenewContract(contract)}
+                            />
+                          </td>
+                        </tr>
+                        {renderHistoryRow(contract, 16)}
+                      </Fragment>
+                    );
+                  })
                 ) : (
                   <tr>
                     <td colSpan="16" className="contracts-table__empty">
@@ -768,35 +939,44 @@ export default function ContractsPage() {
                         </td>
                       </tr>
                     ) : paginatedContracts.length > 0 ? (
-                      paginatedContracts.map((contract) => (
-                        <tr key={contract.id}>
-                          <td className="contracts-table__cell--mono">{contract.cin || "-"}</td>
-                          <td className="contracts-table__cell--strong">{contract.nomPrenom || "-"}</td>
-                          <td className="contracts-table__cell--wrap">{contract.fonction || "-"}</td>
-                          <td className="contracts-table__cell--muted">{contract.segment || "-"}</td>
-                          <td className="contracts-table__cell--wrap">{contract.projet || "-"}</td>
-                          <td className="contracts-table__cell--muted">{contract.site || "-"}</td>
-                          <td>
-                            <TypeBadge value={contract.typeContrat} />
-                          </td>
-                          <td className="contracts-table__cell--date">{formatDate(contract.dateFinContrat)}</td>
-                          <td>
-                            <span className={getDaysClassName(contract)}>{formatDaysRemaining(contract)}</span>
-                          </td>
-                          <td>
-                            <AlertBadge contract={contract} />
-                          </td>
-                          <td className="contracts-table__cell--muted">{contract.traitePar || "-"}</td>
-                          <td>
-                            <ActionMenu
-                              alertMode
-                              disabled={!canRenewContract(contract)}
-                              loading={renewingContractId === contract.id}
-                              onRenew={() => void handleRenewContract(contract)}
-                            />
-                          </td>
-                        </tr>
-                      ))
+                      paginatedContracts.map((contract) => {
+                        const historyKey = getHistoryKey(contract);
+                        return (
+                          <Fragment key={contract.id}>
+                            <tr>
+                              <td className="contracts-table__cell--mono">{contract.cin || "-"}</td>
+                              <td className="contracts-table__cell--strong">{contract.nomPrenom || "-"}</td>
+                              <td className="contracts-table__cell--wrap">{contract.fonction || "-"}</td>
+                              <td className="contracts-table__cell--muted">{contract.segment || "-"}</td>
+                              <td className="contracts-table__cell--wrap">{contract.projet || "-"}</td>
+                              <td className="contracts-table__cell--muted">{contract.site || "-"}</td>
+                              <td>
+                                <TypeBadge value={contract.typeContrat} />
+                              </td>
+                              <td className="contracts-table__cell--date">{formatDate(contract.dateFinContrat)}</td>
+                              <td>
+                                <span className={getDaysClassName(contract)}>{formatDaysRemaining(contract)}</span>
+                              </td>
+                              <td>
+                                <AlertBadge contract={contract} />
+                              </td>
+                              <td className="contracts-table__cell--muted">{contract.traitePar || "-"}</td>
+                              <td>
+                                <ActionMenu
+                                  alertMode
+                                  disabled={!canRenewContract(contract)}
+                                  loading={renewingContractId === contract.id}
+                                  historyLoading={historyLoadingKey === historyKey}
+                                  showHistory={contract.renouvellementsCount > 0}
+                                  onHistory={() => void handleToggleHistory(contract)}
+                                  onRenew={() => void handleRenewContract(contract)}
+                                />
+                              </td>
+                            </tr>
+                            {renderHistoryRow(contract, 12)}
+                          </Fragment>
+                        );
+                      })
                     ) : (
                       <tr>
                         <td colSpan="12" className="contracts-table__empty">

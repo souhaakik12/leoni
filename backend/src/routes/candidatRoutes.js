@@ -22,5 +22,6 @@ router.delete("/:id", controller.deleteCandidat);
 router.put("/:id/etape", controller.updateEtape);
 router.post("/:id/contrat/signer", requireRole(CONTRACT_ALLOWED_ROLES), controller.signerContratCandidat);
 router.post("/:id/dossier-contrat/valider", requireRole(CONTRACT_ALLOWED_ROLES), controller.validerDossierContrat);
+router.put("/:id/suivi-contrat", requireRole(CONTRACT_ALLOWED_ROLES), controller.updateSuiviContrat);
 
 module.exports = router;

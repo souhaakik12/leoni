@@ -1,6 +1,10 @@
-import { useLocation } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useNotifications } from "../context/NotificationsContext.jsx";
 import { ROLE_RESPONSABLE_CONTRAT, normalizeRole } from "../utils/roles.js";
+import leoniLogo from "../assets/leon-logo.svg";
+import "./Navbar.css";
 
 const pageTitles = {
   "/": { title: "Dashboard", sub: "Vue d'ensemble de votre activite" },
@@ -11,52 +15,104 @@ const pageTitles = {
   "/dorms": { title: "Gestion des Foyers", sub: "Gerez les foyers et hebergements" },
   "/missions": { title: "Gestion des Missions", sub: "Gerez les missions de recrutement" },
   "/candidats/candidat": {
-    title: "Candidats - Entree",
-    sub: "Candidats ajoutes directement au debut du processus",
+    title: "Candidats - Entrée",
+    
   },
   "/candidats/test": {
     title: "Candidats - Test",
-    sub: "Entretien candidat: resultat OK ou NOK",
+    
   },
   "/candidats/test/dossier": {
     title: "Dossier Candidat",
-    sub: "Test, entretien et documents du candidat",
+    
   },
   "/contracts": {
     title: "Gestion des Contrats",
-    sub: "Gerez les contrats des employes",
+    
   },
   "/contracts/reception": {
     title: "Service Contrats - Dossiers",
-    sub: "Reception des candidats valides et finalisation contrat",
+    
   },
   "/contracts/sessions": {
-    title: "Service Contrats - Seances",
-    sub: "Seances d'information contrat et affectation du type CDI/CAIP",
+    title: "Service Contrats - Séances",
+    
   },
   "/profile": {
     title: "Mon Profil",
-    sub: "Informations de compte et acces",
+    
   },
   "/change-password": {
     title: "Mot de Passe",
-    sub: "Mise a jour securisee des acces",
+  
   },
   "/employees": {
     title: "Utilisateurs",
-    sub: "Gestion des comptes du systeme",
+    
   },
 };
 
 const roleBadge = {
-  admin: { label: "Admin", bg: "#1e40af", color: "#fff" },
-  recruteur: { label: "Recruteur", bg: "#7c3aed", color: "#fff" },
-  [ROLE_RESPONSABLE_CONTRAT]: { label: "Responsable Contrat", bg: "#ea580c", color: "#fff" },
+  admin: {
+    label: "Admin",
+    bg: "rgba(23, 67, 148, 0.1)",
+    color: "#174394",
+    border: "rgba(23, 67, 148, 0.14)",
+  },
+  recruteur: {
+    label: "Recruteur",
+    bg: "rgba(109, 88, 164, 0.1)",
+    color: "#5f4c94",
+    border: "rgba(95, 76, 148, 0.14)",
+  },
+  [ROLE_RESPONSABLE_CONTRAT]: {
+    label: "Responsable Contrat",
+    bg: "rgba(161, 94, 43, 0.1)",
+    color: "#8f5126",
+    border: "rgba(143, 81, 38, 0.14)",
+  },
 };
 
+function formatNotificationDate(value) {
+  if (!value) return "";
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function resolveNotificationTarget(notification, role) {
+  if (!notification?.MissionId && notification?.TypeNotification !== "MISSION_AFFECTATION") {
+    return "/profile";
+  }
+
+  return normalizeRole(role) === ROLE_RESPONSABLE_CONTRAT ? "/profile" : "/missions";
+}
+
 export default function Navbar({ onToggleSidebar }) {
+  const navigate = useNavigate();
   const { pathname } = useLocation();
   const { user } = useAuth();
+  const {
+    notifications,
+    unreadCount,
+    loadingNotifications,
+    notificationsError,
+    markNotificationAsRead,
+    markAllNotificationsAsRead,
+  } = useNotifications();
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationActionError, setNotificationActionError] = useState("");
+  const [activeNotificationId, setActiveNotificationId] = useState(null);
+  const [markingAllAsRead, setMarkingAllAsRead] = useState(false);
+  const notificationsRef = useRef(null);
   const isDossierPath = /^\/candidats\/test\/\d+\/dossier/.test(pathname);
   const fallbackCandidats = isDossierPath
     ? pageTitles["/candidats/test/dossier"]
@@ -65,39 +121,87 @@ export default function Navbar({ onToggleSidebar }) {
       : null;
   const { title, sub } = pageTitles[pathname] || fallbackCandidats || { title: "LEONI", sub: "" };
   const badge = roleBadge[normalizeRole(user?.role)] || {};
+  const roleChipStyle = badge.label
+    ? {
+        "--chip-bg": badge.bg,
+        "--chip-color": badge.color,
+        "--chip-border": badge.border,
+      }
+    : undefined;
+  const hasNotifications = notifications.length > 0;
+
+  useEffect(() => {
+    if (!notificationsOpen) return undefined;
+
+    const handleOutsideClick = (event) => {
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target)) {
+        setNotificationsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [notificationsOpen]);
+
+  useEffect(() => {
+    setNotificationsOpen(false);
+    setNotificationActionError("");
+  }, [pathname]);
+
+  const handleNotificationClick = async (notification) => {
+    if (!notification) return;
+
+    setNotificationActionError("");
+    setActiveNotificationId(notification.Id);
+
+    try {
+      if (!notification.Lu) {
+        await markNotificationAsRead(notification.Id);
+      }
+
+      setNotificationsOpen(false);
+      navigate(resolveNotificationTarget(notification, user?.role));
+    } catch (error) {
+      setNotificationActionError(
+        error?.message || "Impossible d'ouvrir cette notification."
+      );
+    } finally {
+      setActiveNotificationId(null);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    setNotificationActionError("");
+    setMarkingAllAsRead(true);
+
+    try {
+      await markAllNotificationsAsRead();
+    } catch (error) {
+      setNotificationActionError(
+        error?.message || "Impossible de marquer toutes les notifications comme lues."
+      );
+    } finally {
+      setMarkingAllAsRead(false);
+    }
+  };
 
   return (
-    <header
-      style={{
-        height: 60,
-        borderBottom: "1px solid var(--border)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "0 28px",
-        background: "#fff",
-        flexShrink: 0,
-        position: "sticky",
-        top: 0,
-        zIndex: 100,
-        boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+    <header className="app-header">
+      <div className="app-header__identity">
+        <img src={leoniLogo} alt="LEONI" className="app-header__identity-logo" />
+        <div className="app-header__brand-copy">
+          <p className="app-header__brand-title">Recrutement</p>
+        </div>
+      </div>
+
+      <div className="app-header__page">
         <button
+          type="button"
+          className="app-header__menu-button"
           onClick={onToggleSidebar}
-          style={{
-            background: "none",
-            border: "1px solid var(--border)",
-            borderRadius: 7,
-            width: 32,
-            height: 32,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "var(--text-secondary)",
-            cursor: "pointer",
-          }}
+          aria-label="Basculer la navigation"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="3" y1="6" x2="21" y2="6" />
@@ -105,56 +209,110 @@ export default function Navbar({ onToggleSidebar }) {
             <line x1="3" y1="18" x2="21" y2="18" />
           </svg>
         </button>
-        <div style={{ width: 1, height: 24, background: "var(--border)" }} />
-        <div>
-          <h1 style={{ fontSize: 15, fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>
-            {title}
-          </h1>
-          <p style={{ fontSize: 11, color: "var(--text-muted)" }}>{sub}</p>
+
+        <div className="app-header__divider" aria-hidden="true" />
+
+        <div className="app-header__page-copy">
+          <h1 className="app-header__page-title">{title}</h1>
+          {sub ? <p className="app-header__page-subtitle">{sub}</p> : null}
         </div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span
-          style={{
-            background: "#F5C200",
-            borderRadius: 6,
-            padding: "3px 10px",
-            fontSize: 11,
-            fontWeight: 800,
-            color: "#000",
-            letterSpacing: "0.06em",
-          }}
-        >
-          LEONI
-        </span>
-        <span
-          style={{
-            background: badge.bg,
-            borderRadius: 6,
-            padding: "3px 10px",
-            fontSize: 11,
-            fontWeight: 700,
-            color: badge.color,
-          }}
-        >
-          {badge.label}
-        </span>
-        <div
-          style={{
-            width: 32,
-            height: 32,
-            borderRadius: "50%",
-            background: "#2563eb",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 11,
-            fontWeight: 700,
-            color: "#fff",
-          }}
-        >
-          {user?.avatar}
+      <div className="app-header__actions">
+        {badge.label ? (
+          <span className="app-header__chip app-header__chip--role" style={roleChipStyle}>
+            {badge.label}
+          </span>
+        ) : null}
+        {user ? (
+          <div className="app-header__notifications" ref={notificationsRef}>
+            <button
+              type="button"
+              className="app-header__notifications-button"
+              aria-label={unreadCount > 0 ? `${unreadCount} notifications non lues` : "Notifications"}
+              aria-expanded={notificationsOpen}
+              aria-haspopup="menu"
+              onClick={() => setNotificationsOpen((prev) => !prev)}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M15 17h5l-1.4-1.4a2 2 0 0 1-.6-1.4V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5" />
+                <path d="M10 17a2 2 0 0 0 4 0" />
+              </svg>
+              {unreadCount > 0 ? (
+                <span className="app-header__notifications-badge">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              ) : null}
+            </button>
+
+            {notificationsOpen ? (
+              <div className="app-header__notifications-dropdown" role="menu">
+                <div className="app-header__notifications-head">
+                  <div>
+                    <h3>Notifications</h3>
+                    <p>
+                      {unreadCount > 0
+                        ? `${unreadCount} non lue${unreadCount > 1 ? "s" : ""}`
+                        : "Aucune notification non lue"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="app-header__notifications-mark-all"
+                    onClick={handleMarkAllAsRead}
+                    disabled={!hasNotifications || unreadCount === 0 || markingAllAsRead}
+                  >
+                    {markingAllAsRead ? "Traitement..." : "Tout marquer comme lu"}
+                  </button>
+                </div>
+
+                {notificationActionError ? (
+                  <div className="app-header__notifications-feedback app-header__notifications-feedback--error">
+                    {notificationActionError}
+                  </div>
+                ) : null}
+
+                <div className="app-header__notifications-list">
+                  {loadingNotifications ? (
+                    <div className="app-header__notifications-empty">Chargement des notifications...</div>
+                  ) : notificationsError ? (
+                    <div className="app-header__notifications-empty app-header__notifications-empty--error">
+                      {notificationsError}
+                    </div>
+                  ) : !hasNotifications ? (
+                    <div className="app-header__notifications-empty">Aucune notification</div>
+                  ) : (
+                    notifications.map((notification) => (
+                      <button
+                        key={notification.Id}
+                        type="button"
+                        className={`app-header__notification-item${notification.Lu ? "" : " app-header__notification-item--unread"}`}
+                        onClick={() => handleNotificationClick(notification)}
+                        disabled={activeNotificationId === notification.Id}
+                      >
+                        <div className="app-header__notification-item-top">
+                          <span className="app-header__notification-item-status">
+                            {notification.Lu ? "Lu" : "Non lu"}
+                          </span>
+                          <span className="app-header__notification-item-date">
+                            {formatNotificationDate(notification.CreeLe)}
+                          </span>
+                        </div>
+                        <p className="app-header__notification-item-message">
+                          {notification.Message || "Notification"}
+                        </p>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        <div className="app-header__avatar-shell">
+          <div className="app-header__avatar">
+            {user?.avatar}
+          </div>
         </div>
       </div>
     </header>

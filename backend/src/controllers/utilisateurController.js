@@ -8,6 +8,7 @@ const {
 } = require("../middleware/roleMiddleware");
 const utilisateurModel = require("../models/utilisateurModel");
 const { validatePassword } = require("../utils/passwordValidation");
+const { hashPassword } = require("../utils/passwordSecurity");
 
 const ALLOWED_ROLES = [ROLE_ADMIN, ROLE_RECRUTEUR, ROLE_RESPONSABLE_CONTRAT];
 const INVITE_EXPIRATION_HOURS = 72;
@@ -350,7 +351,8 @@ exports.setupAccount = async (req, res) => {
             });
         }
 
-        const activatedUser = await utilisateurModel.activateAccountWithPassword(token, password);
+        const hashedPassword = await hashPassword(password);
+        const activatedUser = await utilisateurModel.activateAccountWithPassword(token, hashedPassword);
         if (!activatedUser) {
             return res.status(400).json({
                 success: false,

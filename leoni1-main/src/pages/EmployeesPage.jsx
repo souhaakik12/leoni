@@ -25,6 +25,35 @@ const roleLabels = {
   contrats: "Contrats",
 };
 
+const kpiIcons = {
+  total: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  ),
+  active: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="m5 13 4 4L19 7" />
+    </svg>
+  ),
+  inactive: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  ),
+  access: (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 11 12 4l9 7" />
+      <path d="M5 10v10h14V10" />
+      <path d="M9 20v-6h6v6" />
+    </svg>
+  ),
+};
+
 function normalizeValue(value = "") {
   return value
     .toLowerCase()
@@ -61,6 +90,36 @@ export default function EmployeesPage() {
   const totalCount = users.length;
   const activeCount = users.filter((item) => Number(item.Actif) === 1).length;
   const inactiveCount = totalCount - activeCount;
+  const homeAccessCount = users.filter(
+    (item) => Number(item.AccesFoyer ?? 0) === 1
+  ).length;
+
+  const kpiCards = [
+    {
+      key: "total",
+      label: "Total collaborateurs",
+      value: totalCount,
+      note: "Comptes internes enregistres",
+    },
+    {
+      key: "active",
+      label: "Actifs",
+      value: activeCount,
+      note: "Utilisateurs autorises a se connecter",
+    },
+    {
+      key: "inactive",
+      label: "Inactifs",
+      value: inactiveCount,
+      note: "Comptes desactives ou en attente",
+    },
+    {
+      key: "access",
+      label: "Acces foyer autorises",
+      value: homeAccessCount,
+      note: "Autorisations module foyer",
+    },
+  ];
 
   const filteredUsers = users.filter((item) => {
     const normalizedSearch = normalizeValue(search.trim());
@@ -260,15 +319,15 @@ export default function EmployeesPage() {
         <div className="employees-hero__copy">
           <span className="employees-hero__eyebrow">Administration RH</span>
           <h1>Equipe interne</h1>
-          <p>Collaborateurs du bureau - acces administrateur uniquement</p>
+          <p>Gestion des comptes utilisateurs et des acces</p>
         </div>
 
         <button
           type="button"
-          className="employees-button employees-button--primary"
+          className="employees-button employees-button--primary employees-button--hero"
           onClick={openCreateModal}
         >
-          + Ajouter un employe
+          + Ajouter un utilisateur
         </button>
       </section>
 
@@ -281,61 +340,62 @@ export default function EmployeesPage() {
       )}
 
       <section className="employees-stats">
-        <article className="employees-stat">
-          <span className="employees-stat__label">Total</span>
-          <strong>{totalCount}</strong>
-          <p>Collaborateurs enregistres</p>
-        </article>
-
-        <article className="employees-stat">
-          <span className="employees-stat__label">Actifs</span>
-          <strong>{activeCount}</strong>
-          <p>Comptes actuellement actifs</p>
-        </article>
-
-        <article className="employees-stat">
-          <span className="employees-stat__label">Inactifs</span>
-          <strong>{inactiveCount}</strong>
-          <p>Profils desactives</p>
-        </article>
+        {kpiCards.map((card) => (
+          <article
+            key={card.key}
+            className={`employees-stat employees-stat--${card.key}`}
+          >
+            <div className="employees-stat__icon">{kpiIcons[card.key]}</div>
+            <span className="employees-stat__label">{card.label}</span>
+            <strong>{card.value}</strong>
+            <p>{card.note}</p>
+          </article>
+        ))}
       </section>
 
       <section className="employees-toolbar">
-        <label className="employees-search" htmlFor="employees-search">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="11" cy="11" r="6.5" />
-            <path d="M16 16L21 21" />
-          </svg>
-          <input
-            id="employees-search"
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Rechercher un nom, un email ou un role"
-          />
-        </label>
+        <div className="employees-toolbar__filters">
+          <label className="employees-search" htmlFor="employees-search">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="6.5" />
+              <path d="M16 16L21 21" />
+            </svg>
+            <input
+              id="employees-search"
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Rechercher par nom, email ou role..."
+            />
+          </label>
 
-        <div className="employees-filters" aria-label="Filtres utilisateurs">
-          {filters.map((filter) => (
-            <button
-              key={filter.key}
-              type="button"
-              className={`employees-filter${
-                activeFilter === filter.key ? " employees-filter--active" : ""
-              }`}
-              onClick={() => setActiveFilter(filter.key)}
-            >
-              {filter.label}
-            </button>
-          ))}
+          <div className="employees-filters" aria-label="Filtres utilisateurs">
+            {filters.map((filter) => (
+              <button
+                key={filter.key}
+                type="button"
+                className={`employees-filter${
+                  activeFilter === filter.key ? " employees-filter--active" : ""
+                }`}
+                onClick={() => setActiveFilter(filter.key)}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="employees-toolbar__meta">
+          <span className="employees-toolbar__meta-label">Resultat</span>
+          <strong>{filteredUsers.length} collaborateur(s)</strong>
         </div>
       </section>
 
       <section className="employees-directory">
         <div className="employees-directory__head">
           <div>
-            <h2>Liste des collaborateurs</h2>
-            <p>{filteredUsers.length} profil(s) affiche(s)</p>
+            <h2>Annuaire interne</h2>
+            <p>Vue consolidee des comptes, acces et statuts utilisateurs.</p>
           </div>
         </div>
 
@@ -368,6 +428,9 @@ export default function EmployeesPage() {
                       <div className="employee-card__text">
                         <h3>{item.NomComplet}</h3>
                         <p>{item.Email}</p>
+                        <span className="employee-card__meta">
+                          Compte interne #{item.Id}
+                        </span>
                       </div>
                     </div>
 
@@ -389,7 +452,7 @@ export default function EmployeesPage() {
                       {roleLabels[item.Role] || item.Role}
                     </span>
 
-                    {hasHomeAccess && (
+                    {hasHomeAccess ? (
                       <span
                         className={`employee-badge ${
                           Number(item.AccesFoyer) === 1
@@ -399,7 +462,24 @@ export default function EmployeesPage() {
                       >
                         Acces foyer : {Number(item.AccesFoyer) === 1 ? "Oui" : "Non"}
                       </span>
-                    )}
+                    ) : null}
+                  </div>
+
+                  <div className="employee-card__info">
+                    <div className="employee-card__info-item">
+                      <span className="employee-card__info-label">Role</span>
+                      <strong>{roleLabels[item.Role] || item.Role}</strong>
+                    </div>
+
+                    <div className="employee-card__info-item">
+                      <span className="employee-card__info-label">Statut</span>
+                      <strong>{isActive ? "Actif" : "Inactif"}</strong>
+                    </div>
+
+                    <div className="employee-card__info-item">
+                      <span className="employee-card__info-label">Acces foyer</span>
+                      <strong>{Number(item.AccesFoyer) === 1 ? "Oui" : "Non"}</strong>
+                    </div>
                   </div>
 
                   <div className="employee-card__actions">
@@ -428,7 +508,7 @@ export default function EmployeesPage() {
 
                   {isCurrentUser ? (
                     <p className="employee-card__hint">
-                      Vous ne pouvez pas supprimer votre propre compte.
+                      Compte connecte - suppression non autorisee
                     </p>
                   ) : null}
                 </article>
@@ -568,7 +648,8 @@ export default function EmployeesPage() {
               <div>
                 <h2>Confirmer la suppression</h2>
                 <p>
-                  Voulez-vous vraiment supprimer cet utilisateur ? Cette action est definitive.
+                  Voulez-vous vraiment supprimer cet utilisateur ? Cette action est
+                  definitive.
                 </p>
               </div>
 

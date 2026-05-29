@@ -9,7 +9,7 @@ const ROLE_ALIASES = {
   responsable_contrat: ROLE_RESPONSABLE_CONTRAT,
 };
 
-export const CONTRACT_ACCESS_ROLES = [ROLE_ADMIN, ROLE_RESPONSABLE_CONTRAT];
+export const CONTRACT_ACCESS_ROLES = [ROLE_RESPONSABLE_CONTRAT];
 
 export function normalizeRole(role) {
   const normalizedRole = String(role ?? "").trim().toLowerCase();
@@ -27,8 +27,8 @@ export function hasFoyerAccess(user) {
   const accesFoyer = user?.AccesFoyer ?? user?.accesFoyer;
   const normalizedRole = normalizeRole(user?.role);
 
-  if (normalizedRole === ROLE_ADMIN) return true;
   if (normalizedRole === ROLE_RECRUTEUR) return Number(accesFoyer ?? 0) === 1;
+  if (normalizedRole === ROLE_RESPONSABLE_CONTRAT) return Number(accesFoyer ?? 0) === 1;
 
   return false;
 }
@@ -36,9 +36,10 @@ export function hasFoyerAccess(user) {
 export function getHomeRouteForRole(role) {
   const normalizedRole = normalizeRole(role);
 
+  if (normalizedRole === ROLE_ADMIN) return "/admin/dashboards";
   if (normalizedRole === ROLE_RECRUTEUR) return "/missions";
   if (normalizedRole === ROLE_RESPONSABLE_CONTRAT) return "/contracts/reception";
-  return "/";
+  return "/login";
 }
 
 export function buildRoleHeaders(user, headers = {}) {

@@ -1,19 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
-import {
-  ROLE_ADMIN,
-  ROLE_RECRUTEUR,
-  ROLE_RESPONSABLE_CONTRAT,
-  getHomeRouteForRole,
-} from "../utils/roles.js";
+import { getHomeRouteForRole } from "../utils/roles.js";
 import "./LoginPage.css";
-
-const demoAccounts = [
-  { role: ROLE_ADMIN, label: "Admin" },
-  { role: ROLE_RECRUTEUR, label: "Recruteur" },
-  { role: ROLE_RESPONSABLE_CONTRAT, label: "Responsable Contrat" },
-];
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -48,17 +37,6 @@ export default function LoginPage() {
     if (e.key === "Enter") handleSubmit();
   };
 
-  const fillDemo = (role) => {
-    const demos = {
-      [ROLE_ADMIN]: { email: "admin@leoni.com", password: "admin123" },
-      [ROLE_RECRUTEUR]: { email: "recruteur@leoni.com", password: "recruteur123" },
-      [ROLE_RESPONSABLE_CONTRAT]: { email: "contrats@leoni.com", password: "contrats123" },
-    };
-    setEmail(demos[role].email);
-    setPassword(demos[role].password);
-    setError("");
-  };
-
   return (
     <div className="login-page">
       <div className="login-shell">
@@ -80,7 +58,10 @@ export default function LoginPage() {
             <input
               type="email"
               value={email}
-              onChange={(e) => { setEmail(e.target.value); setError(""); }}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setError("");
+              }}
               onKeyDown={handleKeyDown}
               placeholder="Saisir votre e-mail"
             />
@@ -89,29 +70,38 @@ export default function LoginPage() {
             <input
               type="password"
               value={password}
-              onChange={(e) => { setPassword(e.target.value); setError(""); }}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError("");
+              }}
               onKeyDown={handleKeyDown}
               placeholder="........"
             />
 
             <div className="login-options">
               <label className="remember-check">
-                <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                />
                 <span>Se souvenir de moi</span>
               </label>
-              <button className="ghost-link" onClick={() => navigate("/forgot-password")}>Mot de passe oublié ?</button>
+              <button
+                className="ghost-link"
+                onClick={() => navigate("/forgot-password")}
+              >
+                Mot de passe oublié ?
+              </button>
             </div>
 
-            <button className="login-submit" onClick={handleSubmit} disabled={loading}>
+            <button
+              className="login-submit"
+              onClick={handleSubmit}
+              disabled={loading}
+            >
               {loading ? "Connexion..." : "Se connecter"}
             </button>
-
-            <div className="demo-label">COMPTES DE DÉMO</div>
-            <div className="demo-row">
-              {demoAccounts.map((d) => (
-                <button key={d.role} onClick={() => fillDemo(d.role)}>{d.label}</button>
-              ))}
-            </div>
           </div>
         </section>
       </div>

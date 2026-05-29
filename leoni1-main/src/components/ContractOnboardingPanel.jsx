@@ -11,6 +11,21 @@ import { buildRoleHeaders } from "../utils/roles.js";
 import "./ContractOnboardingPanel.css";
 
 const DOCUMENTS_CONTRAT_API_BASE = "http://localhost:3000";
+const TAB_EN_COURS = "en_cours";
+const TAB_VALIDES = "valides";
+const TAB_SUIVI = "suivi";
+
+const SUIVI_CONTRAT_OPTIONS = [
+  { value: "EN_COURS", label: "En cours" },
+  { value: "ABANDONNE", label: "Abandonné" },
+];
+
+const SUIVI_CONTRAT_BADGE_LABELS = {
+  EN_COURS: "En cours",
+  ABANDONNE: "Abandonné",
+};
+
+const SUIVI_CONTRAT_ARCHIVED_STATUSES = new Set(["ABANDONNE"]);
 
 function norm(value) {
   return (value || "")
@@ -40,6 +55,7 @@ function formatDateTime(value) {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   });
 }
 
@@ -48,7 +64,31 @@ function formatStatusLabel(value) {
   if (normalized === "SIGNE") return "SIGNÉ";
   if (normalized === "VALIDE") return "VALIDÉ";
   if (normalized === "INCOMPLET") return "INCOMPLET";
+  if (normalized === "ABANDONNE") return "Abandonné";
+  if (normalized === "EN_COURS") return "En cours";
   return String(value ?? "").trim() || "-";
+}
+
+function formatContractTypeLabel(value) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized || normalized.toUpperCase() === "NON RENSEIGNE") {
+    return "Non renseigné";
+  }
+  return normalized;
+}
+
+function normalizeSuiviContratStatus(value) {
+  const normalized = String(value ?? "").trim().toUpperCase();
+  return Object.prototype.hasOwnProperty.call(SUIVI_CONTRAT_BADGE_LABELS, normalized) ? normalized : "";
+}
+
+function formatSuiviContratLabel(value) {
+  const normalized = normalizeSuiviContratStatus(value);
+  return SUIVI_CONTRAT_BADGE_LABELS[normalized] || "-";
+}
+
+function isArchivedSuiviStatus(value) {
+  return SUIVI_CONTRAT_ARCHIVED_STATUSES.has(normalizeSuiviContratStatus(value));
 }
 
 function getMaritalStatusValue(candidat, maritalStatusDrafts = {}) {
@@ -109,11 +149,16 @@ function computeCandidateWorkflow(candidate, documentsByCandidateId = {}) {
 }
 
 export default function ContractOnboardingPanel() {
-  const TAB_EN_COURS = "en_cours";
-  const TAB_VALIDES = "valides";
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { candidats, validerDossierContrat, signerContratCandidat, setCandidatTypeContrat } = useRecrutements();
+  const {
+    candidats,
+    validerDossierContrat,
+    signerContratCandidat,
+    setCandidatTypeContrat,
+    updateSuiviContrat,
+  } = useRecrutements();
+
   const [toast, setToast] = useState({ message: "", type: "info" });
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState(TAB_EN_COURS);
@@ -124,6 +169,12 @@ export default function ContractOnboardingPanel() {
   const [documentActionDrafts, setDocumentActionDrafts] = useState({});
   const [savingTypeDrafts, setSavingTypeDrafts] = useState({});
   const [expandedCandidateId, setExpandedCandidateId] = useState(null);
+  const [followUpModalCandidate, setFollowUpModalCandidate] = useState(null);
+  const [followUpDraft, setFollowUpDraft] = useState({
+    statut_suivi_contrat: "EN_COURS",
+    motif_suivi_contrat: "",
+  });
+  const [savingFollowUp, setSavingFollowUp] = useState(false);
 
   const queue = useMemo(
     () =>
@@ -158,7 +209,12 @@ export default function ContractOnboardingPanel() {
         const workflow = computeCandidateWorkflow(candidate, documentsByCandidateId);
         const etape = String(candidate?.etape || "").trim().toUpperCase();
         const isContractStage = etape === "DOSSIER_CONTRAT" || etape === "CONTRAT_A_SIGNER";
-        return isContractStage && !workflow.dossierClasseValide && !workflow.finalise;
+        return (
+          isContractStage &&
+          !workflow.dossierClasseValide &&
+          !workflow.finalise &&
+          !isArchivedSuiviStatus(candidate?.statut_suivi_contrat || candidate?.statutSuiviContrat)
+        );
       }),
     [searchedQueue, documentsByCandidateId]
   );
@@ -167,10 +223,27 @@ export default function ContractOnboardingPanel() {
     () =>
       searchedQueue.filter((candidate) => {
         const workflow = computeCandidateWorkflow(candidate, documentsByCandidateId);
-        return workflow.dossierClasseValide || workflow.finalise;
+        return (
+          (workflow.dossierClasseValide || workflow.finalise) &&
+          !isArchivedSuiviStatus(candidate?.statut_suivi_contrat || candidate?.statutSuiviContrat)
+        );
       }),
     [searchedQueue, documentsByCandidateId]
   );
+
+  const followUpQueue = useMemo(
+    () =>
+      searchedQueue.filter((candidate) =>
+        isArchivedSuiviStatus(candidate?.statut_suivi_contrat || candidate?.statutSuiviContrat)
+      ),
+    [searchedQueue]
+  );
+
+  const activeQueue =
+    activeTab === TAB_VALIDES ? validatedQueue : activeTab === TAB_SUIVI ? followUpQueue : ongoingQueue;
+
+  const hasTrackedCandidates =
+    ongoingQueue.length > 0 || validatedQueue.length > 0 || followUpQueue.length > 0;
 
   const pushToast = (message, type = "info", timeout = 2800) => {
     setToast({ message, type });
@@ -189,6 +262,7 @@ export default function ContractOnboardingPanel() {
 
     setDocumentsAttemptedByCandidateId((prev) => ({ ...prev, [candidateId]: true }));
     setDocumentsLoadingByCandidateId((prev) => ({ ...prev, [candidateId]: true }));
+
     try {
       const response = await fetch(
         `${DOCUMENTS_CONTRAT_API_BASE}/api/candidats/${candidateId}/documents-contrat`,
@@ -326,23 +400,12 @@ export default function ContractOnboardingPanel() {
 
     const selectedLieu = SIGNATURE_SUR_PLACE;
 
-    console.log("[ContractOnboardingPanel] Signer le contrat", {
-      candidateId: candidate.id,
-      candidateName: candidate.nomComplet || null,
-      endpoint: `POST /api/candidats/${candidate.id}/contrat/signer`,
-      payload: {
-        typeContrat: normalizedTypeContrat,
-        lieu_signature: selectedLieu,
-        type_contrat: normalizedTypeContrat,
-      },
-    });
-
     const result = await signerContratCandidat(candidate.id, {
       lieuSignature: selectedLieu,
       typeContrat: normalizedTypeContrat,
     });
+
     if (!result?.ok) {
-      console.error("[ContractOnboardingPanel] Signature contrat echec", result);
       pushToast(result?.message || "Signature du contrat impossible.", "error", 3400);
       return;
     }
@@ -374,8 +437,46 @@ export default function ContractOnboardingPanel() {
     }
   };
 
-  const activeQueue = activeTab === TAB_VALIDES ? validatedQueue : ongoingQueue;
-  const hasTrackedCandidates = ongoingQueue.length > 0 || validatedQueue.length > 0;
+  const openFollowUpModal = (candidate) => {
+    setFollowUpModalCandidate(candidate);
+    setFollowUpDraft({
+      statut_suivi_contrat:
+        normalizeSuiviContratStatus(candidate?.statut_suivi_contrat || candidate?.statutSuiviContrat) ||
+        "EN_COURS",
+      motif_suivi_contrat: String(candidate?.motif_suivi_contrat || candidate?.motifSuiviContrat || "").trim(),
+    });
+  };
+
+  const closeFollowUpModal = () => {
+    if (savingFollowUp) return;
+    setFollowUpModalCandidate(null);
+    setFollowUpDraft({
+      statut_suivi_contrat: "EN_COURS",
+      motif_suivi_contrat: "",
+    });
+  };
+
+  const handleConfirmFollowUp = async () => {
+    if (!followUpModalCandidate) return;
+
+    setSavingFollowUp(true);
+    try {
+      const result = await updateSuiviContrat(followUpModalCandidate.id, {
+        statutSuiviContrat: followUpDraft.statut_suivi_contrat,
+        motifSuiviContrat: "",
+      });
+
+      if (!result?.ok) {
+        pushToast(result?.message || "Mise à jour du suivi contrat impossible.", "error", 3400);
+        return;
+      }
+
+      pushToast(result?.message || "Suivi contrat mis à jour.", "success", 2600);
+      closeFollowUpModal();
+    } finally {
+      setSavingFollowUp(false);
+    }
+  };
 
   return (
     <section className="dossier-board">
@@ -384,8 +485,8 @@ export default function ContractOnboardingPanel() {
       <header className="dossier-board-head">
         <div className="dossier-head-content">
           <span className="dossier-category-badge">SERVICE CONTRATS</span>
-          <h3>Dossier contrat - Service contrats</h3>
-          <p>Vue compacte : utilisez "Afficher les documents" pour ouvrir le détail d'un candidat.</p>
+          <h3>Dossier contrat </h3>
+         
         </div>
         <div className="dossier-board-kpi">
           <strong>{queue.length}</strong>
@@ -423,6 +524,14 @@ export default function ContractOnboardingPanel() {
             Dossiers validés
             <span>{validatedQueue.length}</span>
           </button>
+          <button
+            className={`dossier-tab ${activeTab === TAB_SUIVI ? "active" : ""}`}
+            onClick={() => setActiveTab(TAB_SUIVI)}
+            type="button"
+          >
+            Abandonnés
+            <span>{followUpQueue.length}</span>
+          </button>
         </div>
       </div>
 
@@ -435,7 +544,9 @@ export default function ContractOnboardingPanel() {
           {activeQueue.map((candidate) => {
             const workflow = computeCandidateWorkflow(candidate, documentsByCandidateId);
             const progress = workflow.progress;
-            const typeContrat = normalizeContractType(candidate.type_contrat || candidate.typeContrat) || "Non renseigné";
+            const typeContrat = formatContractTypeLabel(
+              normalizeContractType(candidate.type_contrat || candidate.typeContrat)
+            );
             const contratLabel = workflow.contratSigne ? "signé" : "non signé";
             const dossierLabel = workflow.dossierValide
               ? "validé"
@@ -446,16 +557,31 @@ export default function ContractOnboardingPanel() {
             const maritalStatusValue = getMaritalStatusValue(candidate, maritalStatusDrafts);
             const isLoadingDocuments = Boolean(documentsLoadingByCandidateId[candidate.id]);
             const isSavingType = Boolean(savingTypeDrafts[candidate.id]);
-            const canSignContract = Boolean(normalizeContractType(candidate?.type_contrat || candidate?.typeContrat));
+            const canSignContract = Boolean(
+              normalizeContractType(candidate?.type_contrat || candidate?.typeContrat)
+            );
             const isExpanded = expandedCandidateId === candidate.id;
             const showValidatedView = activeTab === TAB_VALIDES;
+            const showFollowUpView = activeTab === TAB_SUIVI;
+            const isReadOnlyView = showValidatedView || showFollowUpView;
+            const suiviStatut = normalizeSuiviContratStatus(
+              candidate?.statut_suivi_contrat || candidate?.statutSuiviContrat
+            );
+            const showSuiviBadge =
+              !workflow.finalise &&
+              !showValidatedView &&
+              !showFollowUpView &&
+              Boolean(suiviStatut);
+            const suiviMotif = String(
+              candidate?.motif_suivi_contrat || candidate?.motifSuiviContrat || ""
+            ).trim();
 
             return (
               <article
                 key={candidate.id}
-                className={`dossier-card-compact ${isExpanded ? "expanded" : ""} ${showValidatedView ? "validated" : ""}`}
+                className={`dossier-card-compact ${isExpanded ? "expanded" : ""} ${isReadOnlyView ? "validated" : ""}`}
               >
-                <div className={`dossier-summary-shell ${showValidatedView ? "validated" : ""}`}>
+                <div className={`dossier-summary-shell ${isReadOnlyView ? "validated" : ""}`}>
                   <div className="dossier-summary-top">
                     <div className="dossier-identity">
                       <h4>{candidate.nomComplet || "Candidat sans nom"}</h4>
@@ -463,21 +589,47 @@ export default function ContractOnboardingPanel() {
                     </div>
                     <div className="dossier-head-badges">
                       <span className="badge type">{typeContrat}</span>
-                      <span className={`badge status ${workflow.contratSigne ? "ok" : "warn"}`}>Contrat {contratLabel}</span>
+                      <span className={`badge status ${workflow.contratSigne ? "ok" : "warn"}`}>
+                        Contrat {contratLabel}
+                      </span>
                       <span className={`badge status ${dossierBadgeState}`}>Dossier {dossierLabel}</span>
-                      {workflow.finalise && <span className="badge status ok">Nouveau recruté</span>}
+                      {showSuiviBadge ? (
+                        <span className="badge status followup">{formatSuiviContratLabel(suiviStatut)}</span>
+                      ) : null}
+                      {workflow.finalise ? <span className="badge status ok">Nouveau recruté</span> : null}
                     </div>
                   </div>
 
-                  {showValidatedView ? (
+                  {showFollowUpView ? (
+                    <div className="validated-summary-grid">
+                      <div>
+                        <span>Statut du suivi</span>
+                        <strong>{formatStatusLabel(formatSuiviContratLabel(suiviStatut))}</strong>
+                      </div>
+                      <div>
+                        <span>Motif</span>
+                        <strong>{suiviMotif || "-"}</strong>
+                      </div>
+                      <div>
+                        <span>Date du suivi</span>
+                        <strong>{formatDateTime(candidate?.dateSuiviContrat || candidate?.date_suivi_contrat)}</strong>
+                      </div>
+                    </div>
+                  ) : showValidatedView ? (
                     <div className="validated-summary-grid">
                       <div>
                         <span>Statut du contrat</span>
-                        <strong>{formatStatusLabel(candidate?.statutContrat || candidate?.statut_contrat || contratLabel)}</strong>
+                        <strong>
+                          {formatStatusLabel(
+                            candidate?.statutContrat || candidate?.statut_contrat || contratLabel
+                          )}
+                        </strong>
                       </div>
                       <div>
                         <span>Statut du dossier</span>
-                        <strong>{formatStatusLabel(candidate?.statutDossier || candidate?.statut_dossier || "VALIDE")}</strong>
+                        <strong>
+                          {formatStatusLabel(candidate?.statutDossier || candidate?.statut_dossier || "VALIDE")}
+                        </strong>
                       </div>
                       <div>
                         <span>Date de signature</span>
@@ -488,7 +640,9 @@ export default function ContractOnboardingPanel() {
                     <div className="summary-progress-row">
                       <div className="summary-progress-label">
                         <span>Progression des documents</span>
-                        <strong>{progress.doneCount}/{progress.total}</strong>
+                        <strong>
+                          {progress.doneCount}/{progress.total}
+                        </strong>
                       </div>
                       <div className="dossier-progress-track compact">
                         <div
@@ -499,19 +653,24 @@ export default function ContractOnboardingPanel() {
                     </div>
                   )}
 
-                  <div className={`summary-main-actions ${showValidatedView ? "validated-actions" : ""}`}>
+                  <div className={`summary-main-actions ${isReadOnlyView ? "validated-actions" : ""}`}>
                     <button className="btn-secondary" onClick={() => openCandidateDossier(candidate.id)} type="button">
                       Consulter le dossier
                     </button>
-                    {!showValidatedView && (
+                    {!isReadOnlyView ? (
                       <button className="btn-toggle-docs" onClick={() => toggleExpanded(candidate.id)} type="button">
                         {isExpanded ? "Masquer les documents" : "Afficher les documents"}
                       </button>
-                    )}
+                    ) : null}
+                    {!showValidatedView ? (
+                      <button className="btn-followup" onClick={() => openFollowUpModal(candidate)} type="button">
+                        Classer le candidat
+                      </button>
+                    ) : null}
                   </div>
                 </div>
 
-                {isExpanded && !showValidatedView && (
+                {isExpanded && !isReadOnlyView ? (
                   <div className="dossier-expand-panel">
                     <div className="expand-status-line">
                       <span>
@@ -524,7 +683,8 @@ export default function ContractOnboardingPanel() {
                         Dossier : <strong>{dossierLabel}</strong>
                       </span>
                       <span>
-                        Date de signature : <strong>{formatDateTime(candidate?.dateSignature || candidate?.date_signature)}</strong>
+                        Date de signature :{" "}
+                        <strong>{formatDateTime(candidate?.dateSignature || candidate?.date_signature)}</strong>
                       </span>
                       <label>
                         Situation familiale :
@@ -623,28 +783,82 @@ export default function ContractOnboardingPanel() {
                         </button>
                       </div>
 
-                      {!canSignContract && !workflow.contratSigne && (
+                      {!canSignContract && !workflow.contratSigne ? (
                         <div className="contract-type-required">
                           Veuillez sélectionner le type de contrat avant de signer.
                         </div>
-                      )}
+                      ) : null}
 
                       <button
-                        className="btn-primary"
+                        className="btn-primary btn-validate-dossier"
                         onClick={() => handleValidateDossier(candidate)}
                         disabled={workflow.dossierValide || !progress.isComplete}
                         type="button"
                       >
-                        {workflow.dossierValide ? "Dossier validé" : "Valider dossier"}
+                        {workflow.dossierValide ? "Dossier validé" : "Valider le dossier"}
                       </button>
                     </div>
                   </div>
-                )}
+                ) : null}
               </article>
             );
           })}
         </div>
       )}
+
+      {followUpModalCandidate ? (
+        <div className="dossier-modal-backdrop" onClick={closeFollowUpModal} role="presentation">
+          <div
+            className="dossier-modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="dossier-modal__head">
+              <div>
+                <h4>Classer le candidat</h4>
+                <p>Choisissez le statut de suivi du dossier contrat.</p>
+              </div>
+            </div>
+
+            <div className="dossier-modal__body">
+              <label className="dossier-modal__field">
+                <span>Statut</span>
+                <select
+                  className="sign-lieu-select dossier-modal__select"
+                  value={followUpDraft.statut_suivi_contrat}
+                  onChange={(event) =>
+                    setFollowUpDraft((prev) => ({
+                      ...prev,
+                      statut_suivi_contrat: event.target.value,
+                    }))
+                  }
+                >
+                  {SUIVI_CONTRAT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="dossier-modal__actions">
+              <button className="btn-secondary" onClick={closeFollowUpModal} disabled={savingFollowUp} type="button">
+                Annuler
+              </button>
+              <button
+                className="suivi-confirm-btn"
+                onClick={() => void handleConfirmFollowUp()}
+                disabled={savingFollowUp}
+                type="button"
+              >
+                {savingFollowUp ? "Enregistrement..." : "Confirmer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
