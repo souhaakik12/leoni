@@ -140,12 +140,12 @@ function hasNonEmptyText(value) {
 
 function validateResidentAge(ageValue) {
     const ageText = String(ageValue ?? "").trim();
-    if (!ageText) return "L\u2019\u00e2ge doit \u00eatre compris entre 18 et 99 ans";
+    if (!ageText) return "L\u2019\u00e2ge doit \u00eatre plus que  18 ans";
     if (!TWO_DIGITS_REGEX.test(ageText)) return "L\u2019\u00e2ge doit \u00eatre compris entre 18 et 99 ans";
 
     const ageNumber = Number(ageText);
     if (!Number.isInteger(ageNumber) || ageNumber < MIN_RESIDENT_AGE || ageNumber > MAX_RESIDENT_AGE) {
-        return "L\u2019\u00e2ge doit \u00eatre compris entre 18 et 99 ans";
+        return "verifier l'age ";
     }
 
     return "";

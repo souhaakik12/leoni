@@ -82,6 +82,10 @@ function formatDateClotureSeance(dateClotureValue) {
 export default function ContractSessionsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const connectedUserName = String(
+    user?.nom || user?.name || user?.NomComplet || user?.nomComplet || ""
+  ).trim();
+  const defaultResponsableName = connectedUserName || "Responsable contrat";
   const {
     seancesWithCandidats,
     waitingSeanceCandidates,
@@ -100,7 +104,7 @@ export default function ContractSessionsPage() {
   const [createForm, setCreateForm] = useState({
     date: todayIsoDate(),
     heure: "09:00",
-    responsable: "Service Contrats",
+    responsable: defaultResponsableName,
   });
 
   const sortedSeances = useMemo(
@@ -135,7 +139,7 @@ export default function ContractSessionsPage() {
     setCreateForm({
       date: todayIsoDate(),
       heure: "09:00",
-      responsable: "Service Contrats",
+      responsable: defaultResponsableName,
     });
     setShowCreateForm(false);
   };
@@ -147,6 +151,12 @@ export default function ContractSessionsPage() {
     }
 
     try {
+      const connectedResponsableId = Number.parseInt(String(user?.id ?? user?.Id ?? ""), 10);
+      const safeResponsableId =
+        Number.isInteger(connectedResponsableId) && connectedResponsableId > 0
+          ? connectedResponsableId
+          : undefined;
+
       const response = await fetch("http://localhost:3000/api/seances-contrat", {
         method: "POST",
         headers: buildRoleHeaders(user, {
@@ -155,7 +165,8 @@ export default function ContractSessionsPage() {
         body: JSON.stringify({
           date: createForm.date,
           heure: createForm.heure,
-          responsable_id: 1,
+          responsable_id: safeResponsableId,
+          responsable_nom: createForm.responsable.trim(),
         }),
       });
 
@@ -288,6 +299,9 @@ export default function ContractSessionsPage() {
 
   const renderSessionCard = (seance) => {
     const isExpanded = expandedSeanceId === seance.id;
+    const responsableLabel = String(
+      seance?.responsableNom || seance?.responsable_nom || ""
+    ).trim() || "Responsable contrat";
     const sentCount = seance.candidats.filter((candidate) => candidate.statut === STATUS_EN_ATTENTE_DOSSIER).length;
     const isTerminee = seance.statutSeance === STATUS_SEANCE_TERMINEE;
     const nbPresentsRaw = Number(seance.nbPresents ?? seance.nb_presents ?? 0);
@@ -309,7 +323,7 @@ export default function ContractSessionsPage() {
               <div className="seance-date-main">{formatDateSeance(seance.date)}</div>
               <div className="seance-time-badge">Heure : {formatHeureSeance(seance.heure)}</div>
             </div>
-            <p className="seance-card-meta">Responsable: {seance.responsableNom || "-"}</p>
+            <p className="seance-card-meta">Responsable: {responsableLabel}</p>
           </div>
 
           <div className="seance-card-badges">

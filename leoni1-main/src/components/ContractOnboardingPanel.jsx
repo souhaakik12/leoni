@@ -137,7 +137,8 @@ function computeCandidateWorkflow(candidate, documentsByCandidateId = {}) {
   const statut = String(candidate?.statut || "").trim().toUpperCase();
   const statutDossier = String(candidate?.statutDossier || candidate?.statut_dossier || "").trim().toUpperCase();
   const finalise = etape === "NOUVEAU_RECRUTE" || statut === "CONTRAT_FINALISE" || (contratSigne && dossierValide);
-  const dossierClasseValide = dossierValide || statutDossier === "VALIDE" || statut === "CONTRAT_FINALISE";
+  const dossierClasseValide =
+    contratSigne && (dossierValide || statutDossier === "VALIDE" || statut === "CONTRAT_FINALISE");
 
   return {
     progress,
@@ -369,6 +370,10 @@ export default function ContractOnboardingPanel() {
     const workflow = computeCandidateWorkflow(candidate, documentsByCandidateId);
     if (workflow.dossierValide) {
       pushToast(`Le dossier de ${candidate.nomComplet} est déjà validé.`, "info");
+      return;
+    }
+    if (!workflow.contratSigne) {
+      pushToast("Le dossier ne peut pas être validé avant la signature du contrat.", "error", 3200);
       return;
     }
     if (!workflow.progress.isComplete) {
@@ -789,10 +794,22 @@ export default function ContractOnboardingPanel() {
                         </div>
                       ) : null}
 
+                      {workflow.contratSigne && !progress.isComplete ? (
+                        <div className="contract-type-required">
+                          Le dossier ne peut pas être validé : documents manquants.
+                        </div>
+                      ) : null}
+
+                      {!workflow.contratSigne ? (
+                        <div className="contract-type-required">
+                          Le dossier ne peut pas être validé avant la signature du contrat.
+                        </div>
+                      ) : null}
+
                       <button
                         className="btn-primary btn-validate-dossier"
                         onClick={() => handleValidateDossier(candidate)}
-                        disabled={workflow.dossierValide || !progress.isComplete}
+                        disabled={workflow.dossierValide || !progress.isComplete || !workflow.contratSigne}
                         type="button"
                       >
                         {workflow.dossierValide ? "Dossier validé" : "Valider le dossier"}

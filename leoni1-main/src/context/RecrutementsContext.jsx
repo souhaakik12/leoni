@@ -175,11 +175,15 @@ function toSeanceId(value) {
 
 function normalizeSeanceContratFields(seance) {
   const next = { ...seance };
+  const resolvedResponsableNom = String(
+    next.responsableNom || next.responsable_nom || next.utilisateur_nom || next.userNom || next.userName || ""
+  ).trim();
   next.id = toSeanceId(next.id) || next.id;
   next.date = next.date || new Date().toISOString().slice(0, 10);
   next.heure = next.heure || "09:00";
   next.responsableId = Number.isInteger(Number(next.responsableId)) ? Number(next.responsableId) : 0;
-  next.responsableNom = (next.responsableNom || "Service Contrats").trim();
+  next.responsableNom = resolvedResponsableNom || "Responsable contrat";
+  next.responsableEmail = String(next.responsableEmail || next.responsable_email || "").trim();
   next.candidatIds = Array.isArray(next.candidatIds)
     ? [...new Set(next.candidatIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))]
     : [];
@@ -439,6 +443,7 @@ export function RecrutementsProvider({ children }) {
           heure: seance?.heure,
           responsableId: seance?.responsable_id ?? seance?.responsableId,
           responsableNom: seance?.responsable_nom ?? seance?.responsableNom,
+          responsableEmail: seance?.responsable_email ?? seance?.responsableEmail,
           statutSeance: seance?.statut_seance ?? seance?.statutSeance,
           candidatIds: seanceId ? candidateIdsBySeance.get(seanceId) || [] : [],
           createdAt: seance?.created_at ?? seance?.createdAt,
@@ -561,7 +566,14 @@ export function RecrutementsProvider({ children }) {
       date: date || new Date().toISOString().slice(0, 10),
       heure: heure || "09:00",
       responsableId: Number.isInteger(Number(responsableId)) ? Number(responsableId) : 0,
-      responsableNom: (responsableNom || "Responsable contrat").trim(),
+      responsableNom: String(
+        responsableNom ||
+        user?.nom ||
+        user?.name ||
+        user?.NomComplet ||
+        user?.nomComplet ||
+        "Responsable contrat"
+      ).trim(),
       candidatIds: Array.isArray(candidatIds) ? candidatIds : [],
       statutSeance: isSessionStatus(statutSeance) ? statutSeance : STATUS_SEANCE_EN_COURS,
       createdAt: new Date().toISOString(),

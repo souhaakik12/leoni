@@ -5,6 +5,7 @@ const RESULT_OK = "OK";
 const RESULT_NOK = "NOK";
 const RESULT_PENDING = "En attente";
 const RESULT_TERMINATED = "TERMINE";
+const REQUIRED_INTERVIEW_DETAILS_MESSAGE = "Veuillez compl\u00e9ter la fonction, le segment, le projet et le site avant de valider l\u2019entretien.";
 
 function toPositiveInt(value) {
     const parsed = Number.parseInt(value, 10);
@@ -23,6 +24,14 @@ function normalizeResult(rawResult) {
 
 function normalizeWorkflowStep(value) {
     return String(value ?? "").trim().toUpperCase();
+}
+
+function hasRequiredInterviewDetails(values = {}) {
+    return ["fonction", "segment", "projet", "site"].every((key) => String(values?.[key] ?? "").trim() !== "");
+}
+
+function isCompleteOkInterview(values = {}) {
+    return hasRequiredInterviewDetails(values) && normalizeResult(values?.resultat_entretien) === RESULT_OK;
 }
 
 function resolveMovementActor(user) {
@@ -74,6 +83,9 @@ exports.createTestEntretien = async (req, res) => {
     if (!resultatEntretien) {
         return res.status(400).json({ message: "resultat_entretien invalide (OK, NOK, En attente)." });
     }
+    if (resultatEntretien === RESULT_OK && !hasRequiredInterviewDetails({ fonction, segment, projet, site })) {
+        return res.status(400).json({ message: REQUIRED_INTERVIEW_DETAILS_MESSAGE });
+    }
 
     let pool;
     let transaction;
@@ -103,6 +115,10 @@ exports.createTestEntretien = async (req, res) => {
                 SELECT TOP 1
                     id,
                     candidat_id,
+                    fonction,
+                    segment,
+                    projet,
+                    site,
                     resultat_entretien,
                     date_entretien
                 FROM dbo.test_entretien WITH (UPDLOCK, HOLDLOCK)
@@ -112,8 +128,9 @@ exports.createTestEntretien = async (req, res) => {
 
         const latestInterview = latestInterviewResult.recordset?.[0] || null;
         const latestResult = normalizeResult(latestInterview?.resultat_entretien);
+        const latestInterviewIsCompleteOk = isCompleteOkInterview(latestInterview);
 
-        if (latestInterview && latestResult === RESULT_OK) {
+        if (latestInterview && latestResult === RESULT_OK && latestInterviewIsCompleteOk) {
             await transaction.rollback();
             return res.status(409).json({
                 message: "Le dernier entretien est deja valide. Aucun nouvel entretien n'est autorise.",
@@ -124,7 +141,13 @@ exports.createTestEntretien = async (req, res) => {
         let persistedInterview = null;
         let interviewAction = "inserted";
 
-        if (latestInterview && latestResult === RESULT_PENDING) {
+        if (
+            latestInterview &&
+            (
+                latestResult === RESULT_PENDING ||
+                (latestResult === RESULT_OK && !latestInterviewIsCompleteOk)
+            )
+        ) {
             const updateResult = await transaction.request()
                 .input("interview_id", sql.Int, latestInterview.id)
                 .input("test_effectue", sql.NVarChar(255), testEffectue || null)

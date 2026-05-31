@@ -227,17 +227,39 @@ app.get("/api/seances-contrat", async (req, res) => {
         await ensureContractWorkflowSchema();
         const pool = await sql.connect(config);
         const seancesResult = await pool.request().query(`
-            SELECT
-                s.id,
-                s.date,
-                s.heure,
-                s.responsable_id,
-                ISNULL(s.statut_seance, '${SEANCE_WORKFLOW_STATUS.IN_PROGRESS}') AS statut_seance,
-                ISNULL(s.nb_presents, 0) AS nb_presents,
-                ISNULL(s.nb_absents, 0) AS nb_absents,
-                s.date_cloture
-            FROM dbo.SeanceContrat s
-            ORDER BY s.date DESC, s.heure DESC, s.id DESC;
+            IF OBJECT_ID('dbo.Utilisateurs', 'U') IS NOT NULL
+            BEGIN
+                SELECT
+                    s.id,
+                    s.date,
+                    s.heure,
+                    s.responsable_id,
+                    NULLIF(LTRIM(RTRIM(ISNULL(u.NomComplet, ''))), '') AS responsable_nom,
+                    NULLIF(LTRIM(RTRIM(ISNULL(u.Email, ''))), '') AS responsable_email,
+                    ISNULL(s.statut_seance, '${SEANCE_WORKFLOW_STATUS.IN_PROGRESS}') AS statut_seance,
+                    ISNULL(s.nb_presents, 0) AS nb_presents,
+                    ISNULL(s.nb_absents, 0) AS nb_absents,
+                    s.date_cloture
+                FROM dbo.SeanceContrat s
+                LEFT JOIN dbo.Utilisateurs u ON u.Id = s.responsable_id
+                ORDER BY s.date DESC, s.heure DESC, s.id DESC;
+            END
+            ELSE
+            BEGIN
+                SELECT
+                    s.id,
+                    s.date,
+                    s.heure,
+                    s.responsable_id,
+                    CAST(NULL AS VARCHAR(100)) AS responsable_nom,
+                    CAST(NULL AS VARCHAR(255)) AS responsable_email,
+                    ISNULL(s.statut_seance, '${SEANCE_WORKFLOW_STATUS.IN_PROGRESS}') AS statut_seance,
+                    ISNULL(s.nb_presents, 0) AS nb_presents,
+                    ISNULL(s.nb_absents, 0) AS nb_absents,
+                    s.date_cloture
+                FROM dbo.SeanceContrat s
+                ORDER BY s.date DESC, s.heure DESC, s.id DESC;
+            END
         `);
         const relationsResult = await pool.request().query(`
             SELECT seance_id, candidat_id
@@ -305,14 +327,24 @@ app.post("/api/seances-contrat", async (req, res) => {
         await ensureContractWorkflowSchema();
         const date = req.body?.date;
         const heure = req.body?.heure;
-        const responsableId = toPositiveInt(req.body?.responsable_id) || 1;
+        const requestUserId = toPositiveInt(req.user?.id ?? req.user?.Id);
+        const bodyResponsableId = toPositiveInt(req.body?.responsable_id);
+        const responsableId = requestUserId || bodyResponsableId;
         const statutSeance = normalizeSeanceWorkflowStatus(req.body?.statut_seance) || SEANCE_WORKFLOW_STATUS.IN_PROGRESS;
+        const requestUserName = String(
+            req.user?.nom || req.user?.name || req.user?.NomComplet || req.user?.nomComplet || ""
+        ).trim();
+        const bodyResponsableNom = String(req.body?.responsable_nom || req.body?.responsable || "").trim();
+        const fallbackResponsableNom = requestUserName || bodyResponsableNom || "Responsable contrat";
 
         if (!date || !isValidSqlDate(date)) {
             return res.status(400).json({ message: "Date invalide." });
         }
         if (!isValidHourFormat(heure)) {
             return res.status(400).json({ message: "Heure invalide. Format attendu HH:mm." });
+        }
+        if (!responsableId) {
+            return res.status(400).json({ message: "Responsable invalide." });
         }
 
         const pool = await sql.connect(config);
@@ -336,6 +368,50 @@ app.post("/api/seances-contrat", async (req, res) => {
             if (!seanceId) {
                 throw new Error("Creation de seance echouee: id introuvable.");
             }
+
+            const createdSeanceView = await transaction.request()
+                .input("seance_id", sql.Int, seanceId)
+                .input("fallback_responsable_nom", sql.VarChar(100), fallbackResponsableNom)
+                .query(`
+                    IF OBJECT_ID('dbo.Utilisateurs', 'U') IS NOT NULL
+                    BEGIN
+                        SELECT
+                            s.id,
+                            s.date,
+                            s.heure,
+                            s.responsable_id,
+                            COALESCE(
+                                NULLIF(LTRIM(RTRIM(ISNULL(u.NomComplet, ''))), ''),
+                                NULLIF(LTRIM(RTRIM(@fallback_responsable_nom)), '')
+                            ) AS responsable_nom,
+                            NULLIF(LTRIM(RTRIM(ISNULL(u.Email, ''))), '') AS responsable_email,
+                            ISNULL(s.statut_seance, '${SEANCE_WORKFLOW_STATUS.IN_PROGRESS}') AS statut_seance,
+                            ISNULL(s.nb_presents, 0) AS nb_presents,
+                            ISNULL(s.nb_absents, 0) AS nb_absents,
+                            s.date_cloture,
+                            s.created_at
+                        FROM dbo.SeanceContrat s
+                        LEFT JOIN dbo.Utilisateurs u ON u.Id = s.responsable_id
+                        WHERE s.id = @seance_id;
+                    END
+                    ELSE
+                    BEGIN
+                        SELECT
+                            s.id,
+                            s.date,
+                            s.heure,
+                            s.responsable_id,
+                            NULLIF(LTRIM(RTRIM(@fallback_responsable_nom)), '') AS responsable_nom,
+                            CAST(NULL AS VARCHAR(255)) AS responsable_email,
+                            ISNULL(s.statut_seance, '${SEANCE_WORKFLOW_STATUS.IN_PROGRESS}') AS statut_seance,
+                            ISNULL(s.nb_presents, 0) AS nb_presents,
+                            ISNULL(s.nb_absents, 0) AS nb_absents,
+                            s.date_cloture,
+                            s.created_at
+                        FROM dbo.SeanceContrat s
+                        WHERE s.id = @seance_id;
+                    END
+                `);
 
             const candidatsMeta = await transaction.request().query(`
                 SELECT
@@ -399,8 +475,9 @@ app.post("/api/seances-contrat", async (req, res) => {
 
             await transaction.commit();
 
+            const createdPayload = createdSeanceView.recordset?.[0] || createdSeance || {};
             res.status(201).json({
-                ...createdSeance,
+                ...createdPayload,
                 assigned_count: assignedCandidateIds.length,
                 assigned_candidate_ids: assignedCandidateIds,
                 updated_count: updatedCount,

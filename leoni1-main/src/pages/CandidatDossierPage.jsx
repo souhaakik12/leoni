@@ -14,6 +14,7 @@ const testOptions = [
 const ENTRETIEN_OK = "OK";
 const ENTRETIEN_NOK = "NOK";
 const ENTRETIEN_ATTENTE = "EN_ATTENTE";
+const REQUIRED_INTERVIEW_DETAILS_MESSAGE = "Veuillez compl\u00e9ter la fonction, le segment, le projet et le site avant de valider l\u2019entretien.";
 
 const documentGroups = [
   {
@@ -85,6 +86,10 @@ function normalizeDocumentName(value) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+function hasRequiredInterviewDetails(values = {}) {
+  return ["fonction", "segment", "projet", "site"].every((key) => String(values?.[key] || "").trim() !== "");
+}
+
 function isDocumentRegistered(doc) {
   return doc && String(doc.statut || "").trim().toUpperCase() === "ENREGISTRE";
 }
@@ -98,6 +103,10 @@ function normalizeInterviewResult(value) {
   }
   if (normalized === "termine") return "TERMINE";
   return ENTRETIEN_ATTENTE;
+}
+
+function isCompleteInterview(values = {}) {
+  return hasRequiredInterviewDetails(values) && normalizeInterviewResult(values?.resultat_entretien || values?.entretienResult) === ENTRETIEN_OK;
 }
 
 function getInterviewFormFromInterview(interview, candidat) {
@@ -189,7 +198,8 @@ export default function CandidatDossierPage() {
     registeredDocumentsByName[normalizeDocumentName(doc?.title || doc?.key)] || null;
   const docsDone = allDocKeys.filter((key) => isDocumentRegistered(getRegisteredDocument({ key }))).length;
   const latestInterviewResult = normalizeInterviewResult(latestInterview?.resultat_entretien);
-  const interviewLockedByOk = latestInterviewResult === ENTRETIEN_OK;
+  const latestInterviewIsComplete = isCompleteInterview(latestInterview);
+  const interviewLockedByOk = latestInterviewResult === ENTRETIEN_OK && latestInterviewIsComplete;
   const interviewLockedByNok = latestInterviewResult === ENTRETIEN_NOK && !allowNewInterview;
   const isInterviewFormDisabled = isInterviewLoading || isInterviewSaving || interviewLockedByOk || interviewLockedByNok;
   const fonctionSelectOptions = buildSelectOptions(fonctionOptions, form.fonction);
@@ -443,6 +453,12 @@ export default function CandidatDossierPage() {
       return;
     }
 
+    if (!hasRequiredInterviewDetails(form)) {
+      setMessage(REQUIRED_INTERVIEW_DETAILS_MESSAGE);
+      setTimeout(() => setMessage(""), 2200);
+      return;
+    }
+
     try {
       setIsInterviewSaving(true);
 
@@ -611,6 +627,7 @@ export default function CandidatDossierPage() {
                 value={form.fonction}
                 onChange={(e) => setForm((p) => ({ ...p, fonction: e.target.value }))}
                 disabled={isInterviewFormDisabled}
+                required
               >
                 <option value="">Sélectionner une fonction</option>
                 {fonctionSelectOptions.map((option) => (
@@ -626,6 +643,7 @@ export default function CandidatDossierPage() {
                 value={form.segment}
                 onChange={(e) => setForm((p) => ({ ...p, segment: e.target.value }))}
                 disabled={isInterviewFormDisabled}
+                required
               >
                 <option value="">Sélectionner un segment</option>
                 {segmentSelectOptions.map((option) => (
@@ -641,6 +659,7 @@ export default function CandidatDossierPage() {
                 value={form.projet}
                 onChange={(e) => setForm((p) => ({ ...p, projet: e.target.value }))}
                 disabled={isInterviewFormDisabled}
+                required
               >
                 <option value="">Sélectionner un projet</option>
                 {projetSelectOptions.map((option) => (
@@ -656,6 +675,7 @@ export default function CandidatDossierPage() {
                 value={form.site}
                 onChange={(e) => setForm((p) => ({ ...p, site: e.target.value }))}
                 disabled={isInterviewFormDisabled}
+                required
               >
                 <option value="">Sélectionner un site</option>
                 {siteSelectOptions.map((option) => (
@@ -671,6 +691,7 @@ export default function CandidatDossierPage() {
                 value={form.entretienResult}
                 onChange={(e) => setForm((p) => ({ ...p, entretienResult: e.target.value }))}
                 disabled={isInterviewFormDisabled}
+                required
               >
                 <option value={ENTRETIEN_ATTENTE}>En attente</option>
                 <option value={ENTRETIEN_OK}>OK</option>
@@ -694,7 +715,7 @@ export default function CandidatDossierPage() {
             </div>
           )}
 
-          {latestInterviewResult === ENTRETIEN_OK && (
+          {latestInterviewResult === ENTRETIEN_OK && latestInterviewIsComplete && (
             <div className="interview-summary">
               <div className="interview-summary-head">
                 <strong>Statut entretien</strong>

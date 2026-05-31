@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import "./DormResidentsPage.css";
 
@@ -231,7 +231,7 @@ function validateResidentForm(form) {
 
   const ageNumber = Number(age);
   if (!/^\d{2}$/.test(age) || !Number.isInteger(ageNumber) || ageNumber < 18 || ageNumber > 99) {
-    next.age = "L\u2019\u00e2ge doit \u00eatre compris entre 18 et 99 ans";
+    next.age = "verifier l'age";
   }
 
   if (phone && !/^[0-9]{1,8}$/.test(phone)) {

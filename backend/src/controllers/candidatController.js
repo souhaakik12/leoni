@@ -8,6 +8,8 @@ const ALLOWED_SUIVI_CONTRAT_STATUSES = new Set([
 ]);
 const MIN_CANDIDATE_AGE = 18;
 const MIN_CANDIDATE_AGE_MESSAGE = "L\u2019\u00e2ge du candidat doit \u00eatre sup\u00e9rieur ou \u00e9gal \u00e0 18 ans.";
+const INCOMPLETE_INTERVIEW_TO_SEANCE_MESSAGE = "Impossible d\u2019envoyer vers S\u00e9ance contrat : les informations d\u2019entretien sont incompl\u00e8tes.";
+
 function readTrimmed(body, ...keys) {
     for (const key of keys) {
         const value = body?.[key];
@@ -44,6 +46,25 @@ function readActionUser(body, requestUser) {
     };
 }
 
+async function findLatestCompleteInterviewForSeance(candidatId) {
+    const pool = await sql.connect(config);
+    const result = await pool.request()
+        .input("id", sql.Int, candidatId)
+        .query(`
+            SELECT TOP 1 *
+            FROM dbo.test_entretien
+            WHERE candidat_id = @id
+              AND LTRIM(RTRIM(ISNULL(fonction, ''))) <> ''
+              AND LTRIM(RTRIM(ISNULL(segment, ''))) <> ''
+              AND LTRIM(RTRIM(ISNULL(projet, ''))) <> ''
+              AND LTRIM(RTRIM(ISNULL(site, ''))) <> ''
+              AND UPPER(LTRIM(RTRIM(ISNULL(resultat_entretien, '')))) = 'OK'
+            ORDER BY date_saisie DESC;
+        `);
+
+    return result.recordset?.[0] || null;
+}
+
 exports.listerCandidats = async (_req, res) => {
     try {
         const pool = await sql.connect(config);
@@ -78,30 +99,52 @@ exports.listerCandidats = async (_req, res) => {
 
         const query = `
             SELECT
-                id,
-                nom,
-                cin,
-                telephone,
-                poste,
-                ${metadata.has_canal ? "canal" : "CAST(NULL AS VARCHAR(50)) AS canal"},
-                ${metadata.has_type_candidature ? "type_candidature" : "CAST(NULL AS VARCHAR(50)) AS type_candidature"},
-                ${metadata.has_etape ? "etape" : "CAST(NULL AS VARCHAR(50)) AS etape"},
-                ${metadata.has_statut ? "statut" : "CAST(NULL AS VARCHAR(50)) AS statut"},
-                ${metadata.has_age ? "age" : "CAST(NULL AS INT) AS age"},
-                ${metadata.has_niveau_scolaire ? "niveau_scolaire" : "CAST(NULL AS VARCHAR(255)) AS niveau_scolaire"},
-                ${metadata.has_adresse ? "adresse" : "CAST(NULL AS VARCHAR(255)) AS adresse"},
-                ${metadata.has_contrat_signe ? "contrat_signe" : "CAST(0 AS BIT) AS contrat_signe"},
-                ${metadata.has_dossier_valide ? "dossier_valide" : "CAST(0 AS BIT) AS dossier_valide"},
-                ${metadata.has_date_signature ? "date_signature" : "CAST(NULL AS DATETIME) AS date_signature"},
-                ${metadata.has_type_contrat ? "type_contrat" : "CAST(NULL AS VARCHAR(30)) AS type_contrat"},
-                ${metadata.has_statut_contrat ? "statut_contrat" : "CAST(NULL AS VARCHAR(30)) AS statut_contrat"},
-                ${metadata.has_statut_dossier ? "statut_dossier" : "CAST(NULL AS VARCHAR(30)) AS statut_dossier"},
-                ${metadata.has_situation_familiale ? "situation_familiale" : "CAST(NULL AS VARCHAR(50)) AS situation_familiale"},
-                ${Boolean(metadata.has_statut_suivi_contrat) ? "statut_suivi_contrat" : "CAST(NULL AS VARCHAR(50)) AS statut_suivi_contrat"},
-                ${Boolean(metadata.has_motif_suivi_contrat) ? "motif_suivi_contrat" : "CAST(NULL AS VARCHAR(255)) AS motif_suivi_contrat"},
-                ${Boolean(metadata.has_date_suivi_contrat) ? "date_suivi_contrat" : "CAST(NULL AS DATETIME) AS date_suivi_contrat"},
-                genre
-            FROM dbo.candidats
+                c.id,
+                c.nom,
+                c.cin,
+                c.telephone,
+                c.poste,
+                ${metadata.has_canal ? "c.canal" : "CAST(NULL AS VARCHAR(50)) AS canal"},
+                ${metadata.has_type_candidature ? "c.type_candidature" : "CAST(NULL AS VARCHAR(50)) AS type_candidature"},
+                ${metadata.has_etape ? "c.etape" : "CAST(NULL AS VARCHAR(50)) AS etape"},
+                ${metadata.has_statut ? "c.statut" : "CAST(NULL AS VARCHAR(50)) AS statut"},
+                ${metadata.has_age ? "c.age" : "CAST(NULL AS INT) AS age"},
+                ${metadata.has_niveau_scolaire ? "c.niveau_scolaire" : "CAST(NULL AS VARCHAR(255)) AS niveau_scolaire"},
+                ${metadata.has_adresse ? "c.adresse" : "CAST(NULL AS VARCHAR(255)) AS adresse"},
+                ${metadata.has_contrat_signe ? "c.contrat_signe" : "CAST(0 AS BIT) AS contrat_signe"},
+                ${metadata.has_dossier_valide ? "c.dossier_valide" : "CAST(0 AS BIT) AS dossier_valide"},
+                ${metadata.has_date_signature ? "c.date_signature" : "CAST(NULL AS DATETIME) AS date_signature"},
+                ${metadata.has_type_contrat ? "c.type_contrat" : "CAST(NULL AS VARCHAR(30)) AS type_contrat"},
+                ${metadata.has_statut_contrat ? "c.statut_contrat" : "CAST(NULL AS VARCHAR(30)) AS statut_contrat"},
+                ${metadata.has_statut_dossier ? "c.statut_dossier" : "CAST(NULL AS VARCHAR(30)) AS statut_dossier"},
+                ${metadata.has_situation_familiale ? "c.situation_familiale" : "CAST(NULL AS VARCHAR(50)) AS situation_familiale"},
+                ${Boolean(metadata.has_statut_suivi_contrat) ? "c.statut_suivi_contrat" : "CAST(NULL AS VARCHAR(50)) AS statut_suivi_contrat"},
+                ${Boolean(metadata.has_motif_suivi_contrat) ? "c.motif_suivi_contrat" : "CAST(NULL AS VARCHAR(255)) AS motif_suivi_contrat"},
+                ${Boolean(metadata.has_date_suivi_contrat) ? "c.date_suivi_contrat" : "CAST(NULL AS DATETIME) AS date_suivi_contrat"},
+                c.genre,
+                dernier_entretien.resultat_entretien AS dernier_resultat_entretien,
+                dernier_entretien.test_effectue AS dernier_test_effectue,
+                dernier_entretien.interviewer AS dernier_interviewer,
+                dernier_entretien.fonction AS dernier_fonction,
+                dernier_entretien.segment AS dernier_segment,
+                dernier_entretien.projet AS dernier_projet,
+                dernier_entretien.site AS dernier_site,
+                dernier_entretien.date_saisie AS dernier_entretien_date
+            FROM dbo.candidats c
+            OUTER APPLY (
+                SELECT TOP 1
+                    te.resultat_entretien,
+                    te.test_effectue,
+                    te.intervieweur AS interviewer,
+                    te.fonction,
+                    te.segment,
+                    te.projet,
+                    te.site,
+                    te.date_saisie
+                FROM dbo.test_entretien te
+                WHERE te.candidat_id = c.id
+                ORDER BY te.date_saisie DESC, te.id DESC
+            ) dernier_entretien
             ORDER BY id DESC;
         `;
 
@@ -343,7 +386,19 @@ exports.updateEtape = async (req, res) => {
             return res.status(400).json({ message: "Etape cible invalide." });
         }
 
+        const candidatExistant = await candidatModel.findCandidatById(id);
+        if (!candidatExistant) {
+            return res.status(404).json({ message: "Candidat introuvable." });
+        }
+
         const normalizedEtape = trimmedEtape.toUpperCase();
+        if (normalizedEtape === "SEANCE_INFO") {
+            const latestCompleteInterview = await findLatestCompleteInterviewForSeance(id);
+            if (!latestCompleteInterview) {
+                return res.status(400).json({ message: INCOMPLETE_INTERVIEW_TO_SEANCE_MESSAGE });
+            }
+        }
+
         const action =
             normalizedEtape === "TEST_ENTRETIEN"
                 ? "Envoyer vers Test / Entretien"

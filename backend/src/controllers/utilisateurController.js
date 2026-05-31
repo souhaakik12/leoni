@@ -93,19 +93,18 @@ async function sendInviteEmail({ email, fullName, inviteLink }) {
     await transporter.sendMail({
         from,
         to: email,
-        subject: "Bienvenue sur LEONI RH \u2014 Cr\u00e9ez votre mot de passe",
+        subject: "Bienvenue sur LEONI Recrutement \u2014 Cr\u00e9ez votre mot de passe",
         text: [
             `Bonjour ${fullName},`,
             "",
-            "Votre compte a \u00e9t\u00e9 cr\u00e9\u00e9 sur la plateforme LEONI RH.",
+            "Votre compte a \u00e9t\u00e9 cr\u00e9\u00e9 sur la plateforme LEONI Recrutement.",
             "Veuillez cliquer sur le lien ci-dessous pour cr\u00e9er votre mot de passe et activer votre compte.",
+            "",
+            "Cr\u00e9er mon mot de passe :",
             "",
             inviteLink,
             "",
             "Ce lien est \u00e0 usage unique.",
-            "",
-            "Cordialement,",
-            "LEONI RH",
         ].join("\n"),
     });
 }

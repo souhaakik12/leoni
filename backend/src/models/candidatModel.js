@@ -824,6 +824,13 @@ async function validerDossierContrat(candidatId, actionUser = null) {
             );
         }
 
+        if (!toBooleanFlag(candidat.contrat_signe)) {
+            throw new CandidatContractError(
+                "Le dossier ne peut pas etre valide avant la signature du contrat.",
+                409
+            );
+        }
+
         const isMarried = isMarriedStatus(candidat.situation_familiale);
 
         const documentsResult = await transaction.request()
@@ -862,7 +869,7 @@ async function validerDossierContrat(candidatId, actionUser = null) {
         const hasStatut = Boolean(schema.has_statut);
         const hasEtape = Boolean(schema.has_etape);
 
-        const finalise = toBooleanFlag(candidat.contrat_signe);
+        const finalise = true;
         const setClauses = ["dossier_valide = 1"];
 
         if (hasStatutDossier) {

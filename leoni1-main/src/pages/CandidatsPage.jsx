@@ -11,6 +11,7 @@ const STATUS_REFUSE = "Refuse";
 const ENTRETIEN_OK = "OK";
 const ENTRETIEN_NOK = "NOK";
 const ENTRETIEN_ATTENTE = "EN_ATTENTE";
+const INCOMPLETE_INTERVIEW_TO_SEANCE_MESSAGE = "Impossible d\u2019envoyer vers S\u00e9ance contrat : les informations d\u2019entretien sont incompl\u00e8tes.";
 const TYPE_CANDIDAT_CONTRACT_SESSION = "contract_session_pending";
 const statutChoices = ["Tous", STATUS_NOUVEAU, STATUS_ACCEPTE, STATUS_REFUSE];
 const ALLOWED_GENRES = ["Femme", "Homme"];
@@ -330,6 +331,35 @@ function buildCandidatePayload(values, options = {}) {
   return payload;
 }
 
+function normalizeInterviewTransferResult(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === ENTRETIEN_OK) return ENTRETIEN_OK;
+  if (normalized === ENTRETIEN_NOK) return ENTRETIEN_NOK;
+  return ENTRETIEN_ATTENTE;
+}
+
+function hasRequiredInterviewDetails(values = {}) {
+  return ["fonction", "segment", "projet", "site"].every((key) => String(values?.[key] || "").trim() !== "");
+}
+
+function hasCompleteInterviewForSeance(values = {}) {
+  return hasRequiredInterviewDetails(values) && normalizeInterviewTransferResult(values?.resultat_entretien || values?.entretienResult) === ENTRETIEN_OK;
+}
+
+async function fetchHasCompleteInterviewForSeance(candidateId, user) {
+  const response = await fetch(`http://localhost:3000/api/test-entretien/${candidateId}`, {
+    headers: buildRoleHeaders(user),
+  });
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(payload?.message || "Chargement des entretiens impossible.");
+  }
+
+  const interviews = Array.isArray(payload?.interviews) ? payload.interviews : [];
+  return interviews.some((interview) => hasCompleteInterviewForSeance(interview));
+}
+
 function getEntretienMeta(value) {
   if (value === ENTRETIEN_OK) return { label: "Entretien OK", className: "ok" };
   if (value === ENTRETIEN_NOK) return { label: "Entretien NOK", className: "nok" };
@@ -388,6 +418,7 @@ function mapApiCandidate(candidate) {
   const contratSigne = toBooleanFlag(candidate?.contrat_signe ?? candidate?.contratSigne);
   const dossierValide = toBooleanFlag(candidate?.dossier_valide ?? candidate?.dossierValide);
   const rawStatut = String(candidate?.statut || "").trim();
+  const latestInterviewResult = normalizeInterviewTransferResult(candidate?.dernier_resultat_entretien);
 
   let typeCandidat = "candidat";
 
@@ -407,7 +438,12 @@ function mapApiCandidate(candidate) {
       ? "EN_ATTENTE_DOSSIER"
       : STATUS_NOUVEAU);
 
-  const entretienResult = etape === "SEANCE_INFO" || etape === "DOSSIER_CONTRAT" ? ENTRETIEN_OK : ENTRETIEN_ATTENTE;
+  let entretienResult = ENTRETIEN_ATTENTE;
+  if (etape === "SEANCE_INFO" || etape === "DOSSIER_CONTRAT") {
+    entretienResult = ENTRETIEN_OK;
+  } else if (etape === "TEST_ENTRETIEN") {
+    entretienResult = latestInterviewResult;
+  }
 
   return normalizeBeforeSave({
     id: candidate?.id,
@@ -420,6 +456,12 @@ function mapApiCandidate(candidate) {
     niveauEtudes: candidate?.niveauEtudes || candidate?.niveau_etudes || candidate?.niveau_scolaire || "",
     posteVise: candidate?.poste || "",
     canalEntree: normalizeCanalEntree(candidate?.canalEntree || candidate?.canal),
+    testPasse: candidate?.dernier_test_effectue || "",
+    entretienAvec: candidate?.dernier_interviewer || "",
+    fonction: candidate?.dernier_fonction || "",
+    segment: candidate?.dernier_segment || "",
+    projet: candidate?.dernier_projet || "",
+    site: candidate?.dernier_site || "",
 
     // ✅ AJOUT IMPORTANT
     etape: etape,
@@ -648,6 +690,11 @@ export default function CandidatsPage() {
   };
 
   const handleEntretienOK = async (candidate) => {
+    const hasCompleteInterview = await fetchHasCompleteInterviewForSeance(candidate.id, user);
+    if (!hasCompleteInterview) {
+      throw new Error(INCOMPLETE_INTERVIEW_TO_SEANCE_MESSAGE);
+    }
+
     const response = await fetch(`http://localhost:3000/api/candidats/${candidate.id}/etape`, {
       method: "PUT",
       headers: buildRoleHeaders(user, {
